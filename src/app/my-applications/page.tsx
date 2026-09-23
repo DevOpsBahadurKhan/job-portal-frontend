@@ -44,7 +44,7 @@ export default function MyApplicationsPage() {
     }
 
     fetchApplications();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, router]);
 
   const fetchApplications = async () => {
     setLoading(true);
@@ -59,6 +59,19 @@ export default function MyApplicationsPage() {
       setError('An error occurred while fetching applications');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'ACCEPTED':
+        return 'bg-green-100 text-green-800';
+      case 'REJECTED':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -107,12 +120,7 @@ export default function MyApplicationsPage() {
                       <p className="text-gray-600">{application.job.company.name}</p>
                     )}
                   </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    application.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                    application.status === 'ACCEPTED' ? 'bg-green-100 text-green-800' :
-                    application.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(application.status)}`}>
                     {application.status}
                   </span>
                 </div>

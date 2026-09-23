@@ -23,8 +23,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
-      router.push('/jobs');
+      const result = await login(formData.email, formData.password);
+      if (result.success) {
+        // Navigate and force a hard refresh of the page
+        window.location.href = '/jobs';
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

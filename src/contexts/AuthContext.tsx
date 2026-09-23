@@ -1,7 +1,9 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api';
+
+type AuthResponse = Awaited<ReturnType<typeof apiClient.login>>;
 
 interface User {
   id: number;
@@ -12,9 +14,8 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (email: string, password: string, name?: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role?: string) => Promise<void>;
+  login: (email: string, password: string, name?: string) => Promise<AuthResponse>;
+  register: (name: string, email: string, password: string, role?: string) => Promise<AuthResponse>;
   logout: () => void;
   loading: boolean;
   isAuthenticated: boolean;
@@ -24,44 +25,37 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Check for existing token on mount
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      apiClient.setToken(storedToken);
-      // Fetch user profile to restore user data
-      fetchUserProfile();
-    }
-    setLoading(false);
-  }, []);
 
   const fetchUserProfile = async () => {
     try {
       const response = await apiClient.getProfile();
       if (response.success && response.data) {
         setUser(response.data);
+      } else {
+        setUser(null);
       }
     } catch (error) {
-      console.error('Failed to fetch user profile:', error);
+      setUser(null);
+      console.error('Failed to restore user profile from accessToken cookie:', error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void fetchUserProfile();
+  }, []);
 
   const login = async (email: string, password: string, name?: string) => {
     setLoading(true);
     try {
       const response = await apiClient.login({ email, password, name });
       if (response.success && response.data) {
-        const newToken = response.data.token;
-        setToken(newToken);
-        apiClient.setToken(newToken);
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.error || 'Login failed');
+        setUser(response.data);
+        return response;
       }
+      throw new Error(response.error || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -72,13 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient.register({ name, email, password, role });
       if (response.success && response.data) {
-        const newToken = response.data.token;
-        setToken(newToken);
-        apiClient.setToken(newToken);
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.error || 'Registration failed');
+        setUser(response.data);
+        return response;
       }
+      throw new Error(response.error || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -86,20 +77,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     setUser(null);
-    setToken(null);
-    apiClient.clearToken();
+    void apiClient.logout();
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
         login,
         register,
         logout,
         loading,
-        isAuthenticated: !!token,
+        isAuthenticated: Boolean(user),
       }}
     >
       {children}

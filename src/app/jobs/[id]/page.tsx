@@ -98,6 +98,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
 
     setApplying(true);
+    setError('');
     try {
       const response = await apiClient.applyForJob(
         parseInt(jobId),
@@ -106,6 +107,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       if (response.success) {
         setApplicationSuccess(true);
         setShowApplicationForm(false);
+        setApplicationData({
+          coverLetter: '',
+          resumeUrl: '',
+        });
       } else {
         setError(response.error || 'Failed to submit application');
       }
@@ -218,7 +223,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               }`}>
                 {job.status}
               </span>
-              {user?.role === 'RECRUITER' && job.recruiterId === user.id && (
+              {(user?.role === 'RECRUITER' || user?.role === 'SUPER_ADMIN') && job.recruiterId === user.id && (
                 <button
                   onClick={() => setShowEditForm(!showEditForm)}
                   className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors font-semibold"
@@ -317,7 +322,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
           )}
 
-          {showEditForm && user?.role === 'RECRUITER' && job.recruiterId === user.id && (
+          {showEditForm && (user?.role === 'RECRUITER' || user?.role === 'SUPER_ADMIN') && job.recruiterId === user.id && (
             <div className="mb-8 p-8 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border border-blue-200">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Job</h2>
               <form onSubmit={handleUpdate} className="space-y-6">
@@ -433,14 +438,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
           )}
 
-          {user?.role === 'CANDIDATE' && (
+          {(!isAuthenticated || user?.role === 'CANDIDATE') && (
             <div>
               {!showApplicationForm ? (
                 <button
-                  onClick={() => setShowApplicationForm(true)}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      router.push('/login');
+                    } else {
+                      setShowApplicationForm(true);
+                    }
+                  }}
                   className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl"
                 >
-                  Apply for this Job
+                  {isAuthenticated ? 'Apply for this Job' : 'Login to Apply'}
                 </button>
               ) : (
                 <form onSubmit={handleApply} className="space-y-6">

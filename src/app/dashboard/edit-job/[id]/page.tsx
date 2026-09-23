@@ -44,7 +44,7 @@ export default function EditJobPage({ params }: { params: Promise<{ id: string }
       return;
     }
 
-    if (user?.role !== 'RECRUITER') {
+    if (user?.role !== 'RECRUITER' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN') {
       router.push('/jobs');
       return;
     }
@@ -108,7 +108,7 @@ export default function EditJobPage({ params }: { params: Promise<{ id: string }
     }
   };
 
-  if (!isAuthenticated || user?.role !== 'RECRUITER') {
+  if (!isAuthenticated || (user?.role !== 'RECRUITER' && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN')) {
     return null;
   }
 

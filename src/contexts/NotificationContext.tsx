@@ -1,10 +1,18 @@
+
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
+
 import { apiClient } from '@/lib/api';
 import { useAuth } from './AuthContext';
 
-interface PushSubscription {
+interface PushSubscriptionPayload {
   endpoint: string;
   expirationTime: number | null;
   keys: {
@@ -21,239 +29,270 @@ interface NotificationContextType {
   error: string | null;
 }
 
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+const NotificationContext =
+  createContext<NotificationContextType | undefined>(undefined);
 
-export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [permission, setPermission] = useState<NotificationPermission>('default');
+export function NotificationProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [permission, setPermission] =
+    useState<NotificationPermission>('default');
+
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasRequestedPermission, setHasRequestedPermission] = useState(false);
+
   const { user, isAuthenticated } = useAuth();
 
+  // Initialize browser notification permission
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (
+      typeof window !== 'undefined' &&
+      'Notification' in window
+    ) {
       setPermission(Notification.permission);
     }
   }, []);
 
-  // Automatically request permission when user logs in
+  // Reset local subscription state when user logs out
   useEffect(() => {
-    console.log('Notification effect check:', { isAuthenticated, user, permission, isSubscribed, hasRequestedPermission });
-    
-    if (isAuthenticated && user && permission === 'default' && !isSubscribed && !hasRequestedPermission) {
-      // Remove localStorage check temporarily to fix loading issue
-      const timer = setTimeout(() => {
-        console.log('Requesting permission...');
-        setHasRequestedPermission(true);
-        void requestPermission();
-      }, 3000);
-      return () => clearTimeout(timer);
+    if (!isAuthenticated || !user) {
+      setIsSubscribed(false);
+      setError(null);
     }
-  }, [isAuthenticated, user, permission, isSubscribed, hasRequestedPermission]);
+  }, [isAuthenticated, user]);
 
-  const requestPermission = async () => {
-    console.log('requestPermission called');
-    
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      console.log('Notifications not supported');
-      setError('This browser does not support notifications');
+  const bufferToBase64 = useCallback(
+    (buffer: ArrayBuffer): string => {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+
+      return window.btoa(binary);
+    },
+    []
+  );
+
+  const urlBase64ToUint8Array = useCallback(
+    (base64String: string): Uint8Array => {
+      const padding = '='.repeat(
+        (4 - (base64String.length % 4)) % 4
+      );
+
+      const base64 = (base64String + padding)
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+      const rawData = window.atob(base64);
+
+      const outputArray = new Uint8Array(rawData.length);
+
+      for (let i = 0; i < rawData.length; i++) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+
+      return outputArray;
+    },
+    []
+  );
+
+  const getSubscriptionPayload = useCallback(
+    (
+      subscription: globalThis.PushSubscription
+    ): PushSubscriptionPayload => {
+      const p256dh = subscription.getKey('p256dh');
+      const auth = subscription.getKey('auth');
+
+      if (!p256dh || !auth) {
+        throw new Error(
+          'Push subscription keys are missing'
+        );
+      }
+
+      return {
+        endpoint: subscription.endpoint,
+        expirationTime: subscription.expirationTime,
+        keys: {
+          p256dh: bufferToBase64(p256dh),
+          auth: bufferToBase64(auth),
+        },
+      };
+    },
+    [bufferToBase64]
+  );
+
+  const subscribeToPush = useCallback(async (): Promise<void> => {
+    if (typeof window === 'undefined') {
       return;
     }
 
-    try {
-      console.log('Current permission:', Notification.permission);
-      const result = await Notification.requestPermission();
-      console.log('Permission result:', result);
-      
-      setPermission(result);
-      // Remove localStorage.setItem temporarily
-      
-      if (result === 'granted') {
-        await subscribeToPush();
-      } else {
-        setError('Notification permission denied');
-      }
-    } catch (err) {
-      console.error('Permission request error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to request permission');
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('Service Worker is not supported');
     }
-  };
 
-  const subscribeToPush = async () => {
-    if (typeof window === 'undefined') return;
+    if (!('PushManager' in window)) {
+      throw new Error('Push API is not supported');
+    }
+
+    if (!user || !isAuthenticated) {
+      throw new Error('Please login to enable notifications');
+    }
+
+    if (Notification.permission !== 'granted') {
+      throw new Error(
+        'Please allow browser notifications first'
+      );
+    }
+
+    setError(null);
+    setIsSubscribed(false);
 
     try {
-      console.log('Starting service worker registration...');
-      
-      // Check if service worker is supported
-      if (!('serviceWorker' in navigator)) {
-        throw new Error('Service Worker not supported');
-      }
+      console.log('Registering service worker...');
 
-      // Check existing registration first
-      const existingRegistration = await navigator.serviceWorker.getRegistration();
-      console.log('Existing registration:', existingRegistration);
-
-      let registration = existingRegistration;
-      
-      if (!registration) {
-        console.log('No existing registration, registering new service worker...');
-        // Register Service Worker
-        registration = await navigator.serviceWorker.register('/sw.js', {
-          scope: '/'
+      // Register or update the root service worker
+      const registration =
+        await navigator.serviceWorker.register('/sw.js', {
+          scope: '/',
+          updateViaCache: 'none',
         });
-        console.log('Service Worker registered:', registration);
-      } else {
-        console.log('Using existing service worker registration');
-      }
 
-      // Ensure service worker is active
-      if (registration.active) {
-        console.log('Service worker is already active');
-      } else if (registration.installing) {
-        console.log('Service worker is installing, waiting for activation...');
-        await new Promise<void>((resolve, reject) => {
-          registration!.installing!.addEventListener('statechange', (e: Event) => {
-            const target = e.target as ServiceWorker;
-            console.log('Service worker state:', target.state);
-            if (target.state === 'activated') {
-              resolve();
-            } else if (target.state === 'redundant') {
-              reject(new Error('Service worker became redundant'));
-            }
-          });
-        });
-      } else if (registration.waiting) {
-        console.log('Service worker is waiting, activating...');
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-        await new Promise<void>((resolve, reject) => {
-          registration!.waiting!.addEventListener('statechange', (e: Event) => {
-            const target = e.target as ServiceWorker;
-            console.log('Service worker state:', target.state);
-            if (target.state === 'activated') {
-              resolve();
-            } else if (target.state === 'redundant') {
-              reject(new Error('Service worker became redundant'));
-            }
-          });
-        });
-      }
+      // Wait until the service worker is ready
+      const readyRegistration =
+        await navigator.serviceWorker.ready;
 
-      console.log('Service worker is active, checking push manager...');
-      
-      // Check if push manager is available
-      if (!registration.pushManager) {
-        throw new Error('Push Manager not available');
-      }
-
-      // Check existing subscription
-      const existingSubscription = await registration.pushManager.getSubscription();
-      console.log('Existing subscription:', existingSubscription);
-
-      if (existingSubscription) {
-        console.log('Already subscribed, using existing subscription');
-        // Send existing subscription to backend
-        if (user) {
-          const response = await apiClient.registerPushSubscription({
-            endpoint: existingSubscription.endpoint,
-            expirationTime: existingSubscription.expirationTime,
-            keys: {
-              p256dh: existingSubscription.getKey('p256dh') 
-                ? bufferToBase64(existingSubscription.getKey('p256dh')!)
-                : '',
-              auth: existingSubscription.getKey('auth')
-                ? bufferToBase64(existingSubscription.getKey('auth')!)
-                : '',
-            },
-          });
-
-          if (response.success) {
-            setIsSubscribed(true);
-            setError(null);
-            return;
-          }
-        }
-      }
-
-      // Get VAPID public key from environment
-      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidPublicKey) {
-        throw new Error('VAPID public key not configured');
-      }
-
-      console.log('VAPID Key from env:', vapidPublicKey);
-      console.log('VAPID Key length:', vapidPublicKey.length);
-
-      // Convert base64 to Uint8Array
-      const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-
-      console.log('VAPID Key converted:', convertedVapidKey);
-      console.log('VAPID Key length:', convertedVapidKey.length);
-
-      // Create PushSubscription
-      console.log('Creating push subscription...');
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedVapidKey as any,
+      console.log('Service worker ready:', {
+        scope: readyRegistration.scope,
+        active: readyRegistration.active?.state,
+        scriptURL: readyRegistration.active?.scriptURL,
       });
 
-      console.log('Push subscription created:', subscription);
-
-      // Send subscription to backend
-      if (user) {
-        const response = await apiClient.registerPushSubscription({
-          endpoint: subscription.endpoint,
-          expirationTime: subscription.expirationTime,
-          keys: {
-            p256dh: subscription.getKey('p256dh') 
-              ? bufferToBase64(subscription.getKey('p256dh')!)
-              : '',
-            auth: subscription.getKey('auth')
-              ? bufferToBase64(subscription.getKey('auth')!)
-              : '',
-          },
-        });
-
-        if (response.success) {
-          setIsSubscribed(true);
-          setError(null);
-        } else {
-          throw new Error(response.error || 'Failed to send subscription to server');
-        }
+      if (!readyRegistration.pushManager) {
+        throw new Error('Push Manager is not available');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to subscribe to push notifications');
+
+      // Check whether a subscription already exists
+      let subscription =
+        await readyRegistration.pushManager.getSubscription();
+
+      if (subscription) {
+        console.log('Existing push subscription found');
+      } else {
+        console.log('Creating a new push subscription...');
+
+        const vapidPublicKey =
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+        if (!vapidPublicKey) {
+          throw new Error(
+            'NEXT_PUBLIC_VAPID_PUBLIC_KEY is not configured'
+          );
+        }
+
+        const convertedVapidKey =
+          urlBase64ToUint8Array(vapidPublicKey);
+
+        subscription =
+          await readyRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: convertedVapidKey,
+          });
+      }
+
+      console.log('Push endpoint:', subscription.endpoint);
+
+      // Send the subscription to the authenticated backend
+      const payload = getSubscriptionPayload(subscription);
+
+      const response =
+        await apiClient.registerPushSubscription(payload);
+
+      if (!response.success) {
+        throw new Error(
+          response.error ||
+          'Failed to register push subscription'
+        );
+      }
+
+      setIsSubscribed(true);
+      setPermission(Notification.permission);
+      setError(null);
+
+      console.log('Push subscription saved successfully');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to subscribe to push notifications';
+
+      setError(message);
+      setIsSubscribed(false);
+
       console.error('Push subscription error:', err);
+
+      throw err;
     }
-  };
+  }, [
+    user,
+    isAuthenticated,
+    getSubscriptionPayload,
+    urlBase64ToUint8Array,
+  ]);
 
-  const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
+  const requestPermission = useCallback(
+    async (): Promise<void> => {
+      if (
+        typeof window === 'undefined' ||
+        !('Notification' in window)
+      ) {
+        setError(
+          'This browser does not support notifications'
+        );
+        return;
+      }
 
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
+      if (!isAuthenticated || !user) {
+        setError('Please login first');
+        return;
+      }
 
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
+      try {
+        setError(null);
 
-    return outputArray;
-  };
+        console.log(
+          'Current notification permission:',
+          Notification.permission
+        );
 
-  const bufferToBase64 = (buffer: ArrayBuffer): string => {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    
-    return window.btoa(binary);
-  };
+        const result =
+          await Notification.requestPermission();
+
+        setPermission(result);
+
+        console.log('Permission result:', result);
+
+        if (result === 'granted') {
+          await subscribeToPush();
+        } else {
+          setIsSubscribed(false);
+          setError('Notification permission denied');
+        }
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Failed to request notification permission';
+
+        setError(message);
+        console.error('Permission request error:', err);
+      }
+    },
+    [isAuthenticated, user, subscribeToPush]
+  );
 
   return (
     <NotificationContext.Provider
@@ -272,8 +311,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
-  if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
+
+  if (!context) {
+    throw new Error(
+      'useNotifications must be used within NotificationProvider'
+    );
   }
+
   return context;
 }

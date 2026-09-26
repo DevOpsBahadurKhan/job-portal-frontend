@@ -253,9 +253,25 @@ export default function DashboardPage() {
     }
   };
 
-  if (!isAuthenticated || (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN')) {
-    return null;
-  }
+  // if (!isAuthenticated || (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN')) {
+  //   return null;
+  // }
+
+  if (authLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p>Checking authentication...</p>
+    </div>
+  );
+}
+
+if (!isAuthenticated) {
+  return null;
+}
+
+if (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN') {
+  return null;
+}
 
   if (!initialized) {
     return (

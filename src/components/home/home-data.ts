@@ -1,6 +1,6 @@
 import type { HomeIconName } from "./home-icons";
 
-export type JobType = "" | "FULL_TIME" | "PART_TIME" | "CONTRACT" | "REMOTE";
+export type JobType = "" | "FULL_TIME" | "PART_TIME" | "INTERNSHIP" |"CONTRACT" | "REMOTE";
 
 export interface Job {
   id: number;
@@ -74,6 +74,7 @@ export const jobTypeOptions: Array<{ value: JobType; label: string }> = [
   { value: "", label: "All Types" },
   { value: "FULL_TIME", label: "Full-time" },
   { value: "PART_TIME", label: "Part-time" },
+  { value: "INTERNSHIP", label: "Internship" },
   { value: "CONTRACT", label: "Contract" },
   { value: "REMOTE", label: "Remote" },
 ];

@@ -31,7 +31,7 @@ export default function RegisterPage() {
 
   const passwordStrength = getPasswordStrength(formData.password);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLElement>) => {
     e.preventDefault();
     setError('');
 

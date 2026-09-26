@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { jobTypeOptions } from "../../components/home/home-data";
 
 const JOBS_PER_PAGE = 10;
 
@@ -238,7 +239,7 @@ function JobsPageContent() {
                 <label htmlFor="jobType" className="mb-1 block text-sm font-medium text-gray-700">
                   Job Type
                 </label>
-                <select
+                {/* <select
                   id="jobType"
                   name="jobType"
                   value={draftFilters.jobType}
@@ -250,7 +251,26 @@ function JobsPageContent() {
                   <option value="PART_TIME">Part Time</option>
                   <option value="CONTRACT">Contract</option>
                   <option value="INTERNSHIP">Internship</option>
-                </select>
+                </select> */
+
+                  <select
+                    id="home-job-type"
+                    name="jobType"
+                    value={draftFilters.jobType}
+                    onChange={handleFilterChange}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                  >
+                    {jobTypeOptions.map((option: { value: string; label: string }) => (
+                      <option key={option.value || "all"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+
+                }
+
+
+
               </div>
 
               <div>

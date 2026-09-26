@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 type AuthResponse = Awaited<ReturnType<typeof apiClient.login>>;
 
@@ -20,7 +21,7 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
-  
+
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,9 +78,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const router = useRouter();
+
   const logout = () => {
     setUser(null);
     void apiClient.logout();
+    router.push("/");
   };
 
   return (

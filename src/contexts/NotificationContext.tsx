@@ -78,7 +78,7 @@ export function NotificationProvider({
   );
 
   const urlBase64ToUint8Array = useCallback(
-    (base64String: string): Uint8Array => {
+    (base64String: string): Uint8Array<ArrayBuffer> => {
       const padding = '='.repeat(
         (4 - (base64String.length % 4)) % 4
       );
@@ -89,7 +89,10 @@ export function NotificationProvider({
 
       const rawData = window.atob(base64);
 
-      const outputArray = new Uint8Array(rawData.length);
+      // Explicitly create a Uint8Array backed by ArrayBuffer
+      const outputArray = new Uint8Array(
+        new ArrayBuffer(rawData.length)
+      );
 
       for (let i = 0; i < rawData.length; i++) {
         outputArray[i] = rawData.charCodeAt(i);
@@ -125,123 +128,153 @@ export function NotificationProvider({
     [bufferToBase64]
   );
 
-  const subscribeToPush = useCallback(async (): Promise<void> => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+  const subscribeToPush = useCallback(
+    async (): Promise<void> => {
+      if (typeof window === 'undefined') {
+        return;
+      }
 
-    if (!('serviceWorker' in navigator)) {
-      throw new Error('Service Worker is not supported');
-    }
+      if (!('serviceWorker' in navigator)) {
+        throw new Error(
+          'Service Worker is not supported'
+        );
+      }
 
-    if (!('PushManager' in window)) {
-      throw new Error('Push API is not supported');
-    }
+      if (!('PushManager' in window)) {
+        throw new Error('Push API is not supported');
+      }
 
-    if (!user || !isAuthenticated) {
-      throw new Error('Please login to enable notifications');
-    }
+      if (!user || !isAuthenticated) {
+        throw new Error(
+          'Please login to enable notifications'
+        );
+      }
 
-    if (Notification.permission !== 'granted') {
-      throw new Error(
-        'Please allow browser notifications first'
-      );
-    }
+      if (Notification.permission !== 'granted') {
+        throw new Error(
+          'Please allow browser notifications first'
+        );
+      }
 
-    setError(null);
-    setIsSubscribed(false);
+      setError(null);
+      setIsSubscribed(false);
 
-    try {
-      console.log('Registering service worker...');
+      try {
+        console.log('Registering service worker...');
 
-      // Register or update the root service worker
-      const registration =
+        // Register or update the root service worker
         await navigator.serviceWorker.register('/sw.js', {
           scope: '/',
           updateViaCache: 'none',
         });
 
-      // Wait until the service worker is ready
-      const readyRegistration =
-        await navigator.serviceWorker.ready;
+        // Wait until the service worker is ready
+        const readyRegistration =
+          await navigator.serviceWorker.ready;
 
-      console.log('Service worker ready:', {
-        scope: readyRegistration.scope,
-        active: readyRegistration.active?.state,
-        scriptURL: readyRegistration.active?.scriptURL,
-      });
+        console.log('Service worker ready:', {
+          scope: readyRegistration.scope,
+          active: readyRegistration.active?.state,
+          scriptURL:
+            readyRegistration.active?.scriptURL,
+        });
 
-      if (!readyRegistration.pushManager) {
-        throw new Error('Push Manager is not available');
-      }
-
-      // Check whether a subscription already exists
-      let subscription =
-        await readyRegistration.pushManager.getSubscription();
-
-      if (subscription) {
-        console.log('Existing push subscription found');
-      } else {
-        console.log('Creating a new push subscription...');
-
-        const vapidPublicKey =
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-
-        if (!vapidPublicKey) {
+        if (!readyRegistration.pushManager) {
           throw new Error(
-            'NEXT_PUBLIC_VAPID_PUBLIC_KEY is not configured'
+            'Push Manager is not available'
           );
         }
 
-        const convertedVapidKey =
-          urlBase64ToUint8Array(vapidPublicKey);
+        // Check whether a subscription already exists
+        let subscription =
+          await readyRegistration.pushManager.getSubscription();
 
-        subscription =
-          await readyRegistration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: convertedVapidKey,
-          });
-      }
+        if (subscription) {
+          console.log(
+            'Existing push subscription found'
+          );
+        } else {
+          console.log(
+            'Creating a new push subscription...'
+          );
 
-      console.log('Push endpoint:', subscription.endpoint);
+          const vapidPublicKey =
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
-      // Send the subscription to the authenticated backend
-      const payload = getSubscriptionPayload(subscription);
+          if (!vapidPublicKey) {
+            throw new Error(
+              'NEXT_PUBLIC_VAPID_PUBLIC_KEY is not configured'
+            );
+          }
 
-      const response =
-        await apiClient.registerPushSubscription(payload);
+          const convertedVapidKey =
+            urlBase64ToUint8Array(vapidPublicKey);
 
-      if (!response.success) {
-        throw new Error(
-          response.error ||
-          'Failed to register push subscription'
+          // FIX: Pass an ArrayBuffer, not
+          // Uint8Array<ArrayBufferLike>.
+          // This resolves the Vercel TypeScript error.
+          const applicationServerKey: ArrayBuffer =
+            convertedVapidKey.buffer;
+
+          subscription =
+            await readyRegistration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey,
+            });
+        }
+
+        console.log(
+          'Push endpoint:',
+          subscription.endpoint
         );
+
+        // Send subscription to authenticated backend
+        const payload =
+          getSubscriptionPayload(subscription);
+
+        const response =
+          await apiClient.registerPushSubscription(
+            payload
+          );
+
+        if (!response.success) {
+          throw new Error(
+            response.error ||
+            'Failed to register push subscription'
+          );
+        }
+
+        setIsSubscribed(true);
+        setPermission(Notification.permission);
+        setError(null);
+
+        console.log(
+          'Push subscription saved successfully'
+        );
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : 'Failed to subscribe to push notifications';
+
+        setError(message);
+        setIsSubscribed(false);
+
+        console.error(
+          'Push subscription error:',
+          err
+        );
+
+        throw err;
       }
-
-      setIsSubscribed(true);
-      setPermission(Notification.permission);
-      setError(null);
-
-      console.log('Push subscription saved successfully');
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to subscribe to push notifications';
-
-      setError(message);
-      setIsSubscribed(false);
-
-      console.error('Push subscription error:', err);
-
-      throw err;
-    }
-  }, [
-    user,
-    isAuthenticated,
-    getSubscriptionPayload,
-    urlBase64ToUint8Array,
-  ]);
+    },
+    [
+      user,
+      isAuthenticated,
+      getSubscriptionPayload,
+      urlBase64ToUint8Array,
+    ]
+  );
 
   const requestPermission = useCallback(
     async (): Promise<void> => {
@@ -279,7 +312,9 @@ export function NotificationProvider({
           await subscribeToPush();
         } else {
           setIsSubscribed(false);
-          setError('Notification permission denied');
+          setError(
+            'Notification permission denied'
+          );
         }
       } catch (err: unknown) {
         const message =
@@ -288,7 +323,11 @@ export function NotificationProvider({
             : 'Failed to request notification permission';
 
         setError(message);
-        console.error('Permission request error:', err);
+
+        console.error(
+          'Permission request error:',
+          err
+        );
       }
     },
     [isAuthenticated, user, subscribeToPush]

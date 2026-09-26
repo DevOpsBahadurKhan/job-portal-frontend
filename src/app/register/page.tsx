@@ -31,7 +31,7 @@ export default function RegisterPage() {
 
   const passwordStrength = getPasswordStrength(formData.password);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLElement>) => {
     e.preventDefault();
     setError('');
 
@@ -45,13 +45,36 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setError('Email is required');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await register(formData.name, formData.email, formData.password, formData.role);
-      router.push('/jobs');
+      console.log('Attempting registration with:', {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role
+      });
+
+      const result = await register(formData.name, formData.email, formData.password, formData.role);
+      console.log('Registration result:', result);
+
+      if (result.success) {
+        // Navigate and force a hard refresh of the page
+        window.location.href = '/jobs';
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const errorMessage = err instanceof Error ? err.message : 'Registration failed';
+      console.error('Registration error:', err);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -238,6 +261,23 @@ export default function RegisterPage() {
                     {formData.password === formData.confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Role
+                </label>
+                <select
+                  id="role"
+                  name="role"
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="CANDIDATE">Candidate - Looking for jobs</option>
+                  <option value="RECRUITER">Recruiter - Posting jobs</option>
+                </select>
               </div>
 
               <div className="flex items-start">

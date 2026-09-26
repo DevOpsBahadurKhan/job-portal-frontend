@@ -31,39 +31,63 @@ interface Company {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
+  const [companyLoading, setCompanyLoading] = useState(true);
   const [error, setError] = useState('');
   const [showEditCompany, setShowEditCompany] = useState(false);
+  const [showCompanyForm, setShowCompanyForm] = useState(false);
+  const [showJobForm, setShowJobForm] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+  const [jobFormData, setJobFormData] = useState({
+    title: '',
+    description: '',
+    location: '',
+    salaryMin: '',
+    salaryMax: '',
+    jobType: 'FULL_TIME',
+    status: 'OPEN',
+    skills: '',
+  });
+  const [creatingJob, setCreatingJob] = useState(false);
   const [editCompanyData, setEditCompanyData] = useState({
     name: '',
     description: '',
     website: '',
     location: ''
   });
+  const [companyFormData, setCompanyFormData] = useState({
+    name: '',
+    description: '',
+    website: '',
+    location: ''
+  });
   const [updatingCompany, setUpdatingCompany] = useState(false);
+  const [creatingCompany, setCreatingCompany] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
 
-    if (user?.role !== 'RECRUITER') {
+    if (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN') {
       router.push('/jobs');
       return;
     }
 
     fetchCompany();
-  }, [isAuthenticated, user]);
+  }, [authLoading, isAuthenticated, user, router]);
 
   useEffect(() => {
-    if (company) {
+    if (company && !companyLoading) {
       fetchJobs();
     }
-  }, [company]);
+  }, [company, companyLoading]);
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -89,8 +113,10 @@ export default function DashboardPage() {
   };
 
   const fetchCompany = async () => {
+    setCompanyLoading(true);
     try {
       const response = await apiClient.getMyCompany();
+      console.log('Company response:', response);
       if (response.success && response.data) {
         setCompany(response.data);
         setEditCompanyData({
@@ -99,9 +125,21 @@ export default function DashboardPage() {
           website: response.data.website,
           location: response.data.location
         });
+        setShowCompanyForm(false);
+        setError('');
+      } else {
+        // If no company found, show company creation form in dashboard
+        console.log('No company found, showing form');
+        setShowCompanyForm(true);
+        setError('');
       }
     } catch (err) {
       console.error('Failed to fetch company:', err);
+      setShowCompanyForm(true);
+      setError('Failed to load company information. Please create a company profile first.');
+    } finally {
+      setCompanyLoading(false);
+      setInitialized(true);
     }
   };
 
@@ -126,6 +164,35 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCreateCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingCompany(true);
+    try {
+      const response = await apiClient.createCompany(companyFormData);
+      console.log('Create company response:', response);
+      if (response.success) {
+        setCompany(response.data);
+        setShowCompanyForm(false);
+        setCompanyFormData({ name: '', description: '', website: '', location: '' });
+        setError('');
+      } else {
+        // If user already has a company, try to fetch it instead
+        if (response.error?.includes('already') || response.error?.includes('existing')) {
+          console.log('User already has company, fetching existing company');
+          await fetchCompany();
+          setError('You already have a company profile. Showing your existing company.');
+        } else {
+          setError(response.error || 'Failed to create company');
+        }
+      }
+    } catch (err) {
+      console.error('Create company error:', err);
+      setError('An error occurred while creating company');
+    } finally {
+      setCreatingCompany(false);
+    }
+  };
+
   const handleDelete = async (jobId: number) => {
     if (!confirm('Are you sure you want to delete this job?')) return;
 
@@ -141,8 +208,83 @@ export default function DashboardPage() {
     }
   };
 
-  if (!isAuthenticated || user?.role !== 'RECRUITER') {
-    return null;
+  const handleCreateJob = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+
+    setCreatingJob(true);
+    try {
+      const jobData = {
+        title: jobFormData.title,
+        description: jobFormData.description,
+        location: jobFormData.location,
+        salaryMin: parseInt(jobFormData.salaryMin),
+        salaryMax: parseInt(jobFormData.salaryMax),
+        jobType: jobFormData.jobType,
+        status: jobFormData.status,
+        skills: jobFormData.skills,
+        companyId: company.id,
+      };
+
+      console.log('Creating job with data:', jobData);
+      const response = await apiClient.createJob(jobData);
+
+      if (response.success) {
+        setShowJobForm(false);
+        setJobFormData({
+          title: '',
+          description: '',
+          location: '',
+          salaryMin: '',
+          salaryMax: '',
+          jobType: 'FULL_TIME',
+          status: 'OPEN',
+          skills: '',
+        });
+        fetchJobs();
+      } else {
+        setError(response.error || 'Failed to create job');
+      }
+    } catch (err) {
+      console.error('Error creating job:', err);
+      setError('An error occurred while creating job');
+    } finally {
+      setCreatingJob(false);
+    }
+  };
+
+  // if (!isAuthenticated || (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN')) {
+  //   return null;
+  // }
+
+  if (authLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p>Checking authentication...</p>
+    </div>
+  );
+}
+
+if (!isAuthenticated) {
+  return null;
+}
+
+if (user?.role !== 'RECRUITER' && user?.role !== 'SUPER_ADMIN') {
+  return null;
+}
+
+  if (!initialized) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -154,17 +296,92 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold text-gray-900">Recruiter Dashboard</h1>
             <p className="mt-2 text-gray-600">Manage your job postings</p>
           </div>
-          <Link
-            href="/dashboard/create-job"
+          <button
+            onClick={() => setShowJobForm(!showJobForm)}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
           >
-            Create New Job
-          </Link>
+            {showJobForm ? 'Cancel' : 'Create New Job'}
+          </button>
         </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
+          </div>
+        )}
+
+        {showCompanyForm && !company && !showJobForm && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Create Company Profile</h3>
+            <button
+              type="button"
+              onClick={() => setShowCompanyForm(false)}
+              className="mb-4 text-sm text-gray-500 hover:text-gray-700"
+            >
+              ← Cancel
+            </button>
+            <form onSubmit={handleCreateCompany} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Company Name</label>
+                <input
+                  type="text"
+                  value={companyFormData.name}
+                  onChange={(e) => setCompanyFormData({ ...companyFormData, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="e.g. Acme Technologies"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                <textarea
+                  rows={3}
+                  value={companyFormData.description}
+                  onChange={(e) => setCompanyFormData({ ...companyFormData, description: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="Describe your company, mission, and culture..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Website</label>
+                <input
+                  type="url"
+                  value={companyFormData.website}
+                  onChange={(e) => setCompanyFormData({ ...companyFormData, website: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="https://example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
+                <input
+                  type="text"
+                  value={companyFormData.location}
+                  onChange={(e) => setCompanyFormData({ ...companyFormData, location: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="e.g. Bengaluru, Mumbai, Remote"
+                />
+              </div>
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  disabled={creatingCompany}
+                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingCompany ? 'Creating...' : 'Create Company'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCompanyForm(false)}
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 px-6 rounded-xl hover:bg-gray-300 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -271,7 +488,142 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {loading ? (
+        {showJobForm && company && !showCompanyForm && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Create New Job</h3>
+            <button
+              type="button"
+              onClick={() => setShowJobForm(false)}
+              className="mb-4 text-sm text-gray-500 hover:text-gray-700"
+            >
+              ← Cancel
+            </button>
+            <form onSubmit={handleCreateJob} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Job Title</label>
+                <input
+                  type="text"
+                  value={jobFormData.title}
+                  onChange={(e) => setJobFormData({ ...jobFormData, title: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="e.g. Senior Backend Developer"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                <textarea
+                  rows={3}
+                  value={jobFormData.description}
+                  onChange={(e) => setJobFormData({ ...jobFormData, description: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="Describe the role, responsibilities, and requirements..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
+                <input
+                  type="text"
+                  value={jobFormData.location}
+                  onChange={(e) => setJobFormData({ ...jobFormData, location: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="e.g. Remote, Bengaluru, Mumbai"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Min Salary</label>
+                  <input
+                    type="number"
+                    value={jobFormData.salaryMin}
+                    onChange={(e) => setJobFormData({ ...jobFormData, salaryMin: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    placeholder="60000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Max Salary</label>
+                  <input
+                    type="number"
+                    value={jobFormData.salaryMax}
+                    onChange={(e) => setJobFormData({ ...jobFormData, salaryMax: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    placeholder="90000"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Job Type</label>
+                <select
+                  value={jobFormData.jobType}
+                  onChange={(e) => setJobFormData({ ...jobFormData, jobType: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="FULL_TIME">Full Time</option>
+                  <option value="PART_TIME">Part Time</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="INTERNSHIP">Internship</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                <select
+                  value={jobFormData.status}
+                  onChange={(e) => setJobFormData({ ...jobFormData, status: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                >
+                  <option value="OPEN">Open</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Skills</label>
+                <input
+                  type="text"
+                  value={jobFormData.skills}
+                  onChange={(e) => setJobFormData({ ...jobFormData, skills: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  required
+                  placeholder="e.g. Node.js, Express, MySQL"
+                />
+              </div>
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  disabled={creatingJob}
+                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-xl hover:bg-blue-700 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingJob ? 'Creating...' : 'Create Job'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowJobForm(false)}
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 px-6 rounded-xl hover:bg-gray-300 transition-all duration-300 font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {!company ? (
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <p className="text-gray-600 mb-4">No company profile found. Please create your company profile to post jobs.</p>
+            <button
+              onClick={() => setShowCompanyForm(true)}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              Create Company Profile
+            </button>
+          </div>
+        ) : loading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             <p className="mt-4 text-gray-600">Loading jobs...</p>
@@ -279,12 +631,12 @@ export default function DashboardPage() {
         ) : jobs.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
             <p className="text-gray-600 mb-4">No jobs posted yet.</p>
-            <Link
-              href="/dashboard/create-job"
-              className="text-blue-600 hover:text-blue-700"
+            <button
+              onClick={() => setShowJobForm(true)}
+              className="text-blue-600 hover:text-blue-700 font-medium"
             >
               Create your first job posting
-            </Link>
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">

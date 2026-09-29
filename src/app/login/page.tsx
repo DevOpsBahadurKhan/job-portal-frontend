@@ -1,21 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import Navbar from '@/components/Navbar';
 
 export default function LoginPage() {
+
+  
+  
+  const searchParams = useSearchParams();
+  
   const router = useRouter();
   const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => searchParams.get('error') || '');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();

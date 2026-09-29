@@ -239,19 +239,7 @@ function JobsPageContent() {
                 <label htmlFor="jobType" className="mb-1 block text-sm font-medium text-gray-700">
                   Job Type
                 </label>
-                {/* <select
-                  id="jobType"
-                  name="jobType"
-                  value={draftFilters.jobType}
-                  onChange={handleFilterChange}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-blue-500"
-                >
-                  <option value="">All Types</option>
-                  <option value="FULL_TIME">Full Time</option>
-                  <option value="PART_TIME">Part Time</option>
-                  <option value="CONTRACT">Contract</option>
-                  <option value="INTERNSHIP">Internship</option>
-                </select> */
+                {
 
                   <select
                     id="home-job-type"

@@ -46,7 +46,7 @@ export default function Navbar() {
             {isAuthenticated ? (
               <>
                 <Link href="/profile" className={linkClassName}>Profile</Link>
-                <span className="max-w-40 truncate px-2 text-sm text-gray-700">Welcome, {user?.name}</span>
+                <span className="max-w-40 truncate px-2 text-sm text-gray-700">{user?.name}</span>
                 <button
                   type="button"
                   onClick={logout}

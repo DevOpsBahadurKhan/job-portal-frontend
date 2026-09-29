@@ -37,12 +37,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showApplicationForm, setShowApplicationForm] = useState(false);
-  const [applicationData, setApplicationData] = useState({
-    coverLetter: '',
-    resumeUrl: '',
-  });
+  const [coverLetter, setCoverLetter] = useState('');
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [applying, setApplying] = useState(false);
   const [applicationSuccess, setApplicationSuccess] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [checkingApplication, setCheckingApplication] = useState(false);
   const [jobId, setJobId] = useState<string>('');
   const [showEditForm, setShowEditForm] = useState(false);
   const [editData, setEditData] = useState({
@@ -63,6 +63,44 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       fetchJob(p.id);
     });
   }, []);
+
+  useEffect(() => {
+    if (!jobId || !isAuthenticated || user?.role !== 'CANDIDATE') {
+      setHasApplied(false);
+      setCheckingApplication(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkApplicationStatus = async () => {
+      setCheckingApplication(true);
+      try {
+        const response = await apiClient.getMyApplications();
+        if (cancelled) return;
+
+        if (response.success && Array.isArray(response.data)) {
+          const applied = response.data.some(
+            (application: { jobId: number | string }) =>
+              Number(application.jobId) === Number(jobId)
+          );
+          setHasApplied(applied);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to check application status:', err);
+        }
+      } finally {
+        if (!cancelled) setCheckingApplication(false);
+      }
+    };
+
+    checkApplicationStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, isAuthenticated, user?.role]);
 
   const fetchJob = async (id: string) => {
     setLoading(true);
@@ -92,25 +130,36 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
 
+    if (!resumeFile) {
+      setError('Please upload your resume');
+      return;
+    }
+
     setApplying(true);
     setError('');
+
     try {
+      const formData = new FormData();
+      formData.append('coverLetter', coverLetter);
+      formData.append('file', resumeFile);
+
       const response = await apiClient.applyForJob(
-        parseInt(jobId),
-        applicationData
+        Number(jobId),
+        formData
       );
+
       if (response.success) {
         setApplicationSuccess(true);
+        setHasApplied(true);
         setShowApplicationForm(false);
-        setApplicationData({
-          coverLetter: '',
-          resumeUrl: '',
-        });
+        setCoverLetter('');
+        setResumeFile(null);
       } else {
         setError(response.error || 'Failed to submit application');
       }
@@ -216,11 +265,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               )}
             </div>
             <div className="flex items-center gap-3">
-              <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold ${
-                job.status === 'OPEN' ? 'bg-green-100 text-green-800' :
+              <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold ${job.status === 'OPEN' ? 'bg-green-100 text-green-800' :
                 job.status === 'CLOSED' ? 'bg-red-100 text-red-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
+                  'bg-gray-100 text-gray-800'
+                }`}>
                 {job.status}
               </span>
               {(user?.role === 'RECRUITER' || user?.role === 'SUPER_ADMIN') && job.recruiterId === user.id && (
@@ -440,8 +488,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
           {(!isAuthenticated || user?.role === 'CANDIDATE') && (
             <div>
-              {!showApplicationForm ? (
+              {hasApplied ? (
                 <button
+                  type="button"
+                  disabled
+                  className="w-full bg-green-100 text-green-800 py-4 px-6 rounded-xl font-semibold text-lg cursor-not-allowed"
+                >
+                  Already Applied
+                </button>
+              ) : !showApplicationForm ? (
+                <button
+                  type="button"
+                  disabled={checkingApplication}
                   onClick={() => {
                     if (!isAuthenticated) {
                       router.push('/login');
@@ -449,9 +507,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       setShowApplicationForm(true);
                     }
                   }}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl"
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isAuthenticated ? 'Apply for this Job' : 'Login to Apply'}
+                  {checkingApplication
+                    ? 'Checking application...'
+                    : isAuthenticated
+                      ? 'Apply for this Job'
+                      : 'Login to Apply'}
                 </button>
               ) : (
                 <form onSubmit={handleApply} className="space-y-6">
@@ -465,38 +527,60 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       required
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                       placeholder="Tell us why you're interested in this role..."
-                      value={applicationData.coverLetter}
-                      onChange={(e) =>
-                        setApplicationData({
-                          ...applicationData,
-                          coverLetter: e.target.value,
-                        })
-                      }
+                      value={coverLetter}
+                      onChange={(e) => setCoverLetter(e.target.value)}
                     />
                   </div>
                   <div>
-                    <label htmlFor="resumeUrl" className="block text-sm font-semibold text-gray-700 mb-2">
-                      Resume URL
+                    <label htmlFor="resume" className="block text-sm font-semibold text-gray-700 mb-2">
+                      Upload Resume (PDF)
                     </label>
                     <input
-                      type="url"
-                      id="resumeUrl"
+                      type="file"
+                      id="resume"
+                      name="file"
+                      accept=".pdf,application/pdf"
                       required
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+
+                        if (!file) {
+                          setResumeFile(null);
+                          return;
+                        }
+
+                        if (file.type !== 'application/pdf') {
+                          setError('Only PDF files are allowed');
+                          e.target.value = '';
+                          setResumeFile(null);
+                          return;
+                        }
+
+                        if (file.size > 5 * 1024 * 1024) {
+                          setError('Resume must be smaller than 5 MB');
+                          e.target.value = '';
+                          setResumeFile(null);
+                          return;
+                        }
+
+                        setError('');
+                        setResumeFile(file);
+                      }}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                      placeholder="https://example.com/resume.pdf"
-                      value={applicationData.resumeUrl}
-                      onChange={(e) =>
-                        setApplicationData({
-                          ...applicationData,
-                          resumeUrl: e.target.value,
-                        })
-                      }
                     />
+                    {resumeFile && (
+                      <p className="mt-2 text-sm text-green-700">
+                        Selected: {resumeFile.name}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      PDF only. Maximum size 5 MB.
+                    </p>
                   </div>
                   <div className="flex gap-4">
                     <button
                       type="submit"
-                      disabled={applying}
+                      disabled={applying || !resumeFile}
                       className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-6 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {applying ? 'Submitting...' : 'Submit Application'}

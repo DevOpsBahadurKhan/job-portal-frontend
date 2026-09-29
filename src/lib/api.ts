@@ -214,13 +214,30 @@ class ApiClient {
       ["POST", "PUT", "PATCH", "DELETE"].includes(method);
 
     try {
+      // Detect multipart FormData uploads.
+      // The browser must set Content-Type with its multipart boundary.
+      const isFormData =
+        typeof FormData !== "undefined" &&
+        options.body instanceof FormData;
+
       const headers = new Headers(this.getHeaders());
+
+      // Do not send application/json for FormData.
+      if (isFormData) {
+        headers.delete("Content-Type");
+      }
 
       new Headers(options.headers).forEach(
         (value, key) => {
           headers.set(key, value);
         }
       );
+
+      // Ensure a caller-supplied header cannot override the browser's
+      // multipart Content-Type/boundary handling.
+      if (isFormData) {
+        headers.delete("Content-Type");
+      }
 
       // Fetch and attach CSRF token only when required.
       // Login and register pass useCsrf=false.
@@ -700,16 +717,13 @@ class ApiClient {
 
   async applyForJob(
     jobId: number,
-    data: {
-      coverLetter: string;
-      resumeUrl: string;
-    }
+    formData: FormData
   ) {
     return this.request<any>(
       `/api/application/${jobId}/apply`,
       {
         method: "POST",
-        body: JSON.stringify(data),
+        body: formData,
       }
     );
   }

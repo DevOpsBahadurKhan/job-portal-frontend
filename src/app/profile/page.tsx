@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface UserProfile {
@@ -18,38 +17,42 @@ interface UserProfile {
 export default function ProfilePage() {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
-
-    fetchProfile();
+    setLoading(false);
   }, [isAuthenticated, router]);
-
-  const fetchProfile = async () => {
-    setLoading(true);
-    try {
-      const response = await apiClient.getProfile();
-      if (response.success && response.data) {
-        setProfile(response.data);
-      } else {
-        setError(response.error || 'Failed to fetch profile');
-      }
-    } catch (err) {
-      setError('An error occurred while fetching profile');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (!isAuthenticated) {
     return null;
   }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Use user data from AuthContext instead of API call
+  const profile = user ? {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    createdAt: (user as any).createdAt || new Date().toISOString()
+  } : null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -61,18 +64,7 @@ export default function ProfilePage() {
             <p className="mt-2 text-gray-600">View and manage your account information</p>
           </div>
 
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Loading profile...</p>
-            </div>
-          ) : profile ? (
+          {profile ? (
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center mb-6">
                 <div className="h-20 w-20 bg-blue-500 rounded-full flex items-center justify-center">
@@ -83,8 +75,9 @@ export default function ProfilePage() {
                 <div className="ml-6">
                   <h2 className="text-2xl font-bold text-gray-900">{profile.name}</h2>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    profile.role === 'SUPER_ADMIN' ? 'bg-red-100 text-red-800' :
+                    profile.role === 'ADMIN' ? 'bg-orange-100 text-orange-800' :
                     profile.role === 'RECRUITER' ? 'bg-purple-100 text-purple-800' :
-                    profile.role === 'ADMIN' ? 'bg-red-100 text-red-800' :
                     'bg-blue-100 text-blue-800'
                   }`}>
                     {profile.role}
@@ -138,21 +131,31 @@ export default function ProfilePage() {
                   </Link>
                 )}
 
-                {profile.role === 'RECRUITER' && (
-                  <>
-                    <Link
-                      href="/dashboard"
-                      className="block w-full text-center bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium"
-                    >
-                      Go to Dashboard
-                    </Link>
-                    <Link
-                      href="/companies"
-                      className="block w-full text-center bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 transition-colors font-medium"
-                    >
-                      Manage Companies
-                    </Link>
-                  </>
+                {(profile.role === 'RECRUITER' || profile.role === 'SUPER_ADMIN') && (
+                  <Link
+                    href="/dashboard"
+                    className="block w-full text-center bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Go to Dashboard
+                  </Link>
+                )}
+
+                {profile.role === 'SUPER_ADMIN' && (
+                  <Link
+                    href="/companies"
+                    className="block w-full text-center bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 transition-colors font-medium"
+                  >
+                    Manage Companies
+                  </Link>
+                )}
+
+                {(profile.role === 'ADMIN' || profile.role === 'SUPER_ADMIN') && (
+                  <Link
+                    href="/admin"
+                    className="block w-full text-center bg-red-600 text-white py-3 px-4 rounded-md hover:bg-red-700 transition-colors font-medium"
+                  >
+                    Admin Dashboard
+                  </Link>
                 )}
 
                 <button

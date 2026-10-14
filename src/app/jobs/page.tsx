@@ -22,6 +22,7 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
+
 import Navbar from "@/components/Navbar";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -92,7 +93,7 @@ function JobsPageContent() {
   const [pagination, setPagination] =
     useState<Pagination>(EMPTY_PAGINATION);
   const [deletingJobId, setDeletingJobId] =
-    useState<number | null>(null);
+    useState<string | null>(null);
   const [selectedDeleteJob, setSelectedDeleteJob] =
     useState<Job | null>(null);
   const [draftFilters, setDraftFilters] =
@@ -253,11 +254,20 @@ function JobsPageContent() {
   // Delete job
   const handleDeleteJob = async () => {
     if (!selectedDeleteJob) return;
+
     const jobId = selectedDeleteJob.id;
     setDeletingJobId(jobId);
     setError("");
+
     try {
-      const response = await apiClient.deleteJob(jobId);
+      const numericJobId = Number(jobId);
+
+      if (!Number.isFinite(numericJobId) || numericJobId <= 0) {
+        setError("Invalid job ID.");
+        return;
+      }
+
+      const response = await apiClient.deleteJob(numericJobId);
       if (response.success) {
         setJobs((current) =>
           current.filter((job) => job.id !== jobId)
@@ -564,7 +574,7 @@ function JobsPageContent() {
                     <JobCard
                       job={job}
                       canManage={canManage}
-                      isDeleting={deletingJobId === job.id}
+                      isDeleting={deletingJobId === String(job.id)}
                       onDelete={() => setSelectedDeleteJob(job)}
                     />
                   </div>

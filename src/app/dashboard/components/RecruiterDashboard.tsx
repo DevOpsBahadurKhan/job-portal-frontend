@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -52,9 +51,7 @@ export default function RecruiterDashboard() {
                 </header>
 
                 <div className="p-5 sm:p-8">
-                    {activeSection === "overview" && (
-                        <RecruiterOverview onNavigate={setActiveSection} />
-                    )}
+                    {activeSection === "overview" && <RecruiterOverview />}
 
                     {activeSection === "jobs" && <JobManagement />}
 

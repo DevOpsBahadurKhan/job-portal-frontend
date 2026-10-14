@@ -8,7 +8,12 @@ import JobManagement from "./admin/JobManagement";
 import CompanyManagement from "./admin/CompanyManagement";
 import ApplicationManagement from "./admin/ApplicationsManagement";
 
-export type ActiveSection = "overview" | "users" | "jobs" | "companies" | "application" ;
+export type ActiveSection =
+  | "overview"
+  | "users"
+  | "jobs"
+  | "companies"
+  | "application";
 
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] =
@@ -49,22 +54,15 @@ export default function AdminDashboard() {
         </header>
 
         <div className="p-5 sm:p-8">
-          {activeSection === "overview" && (
-            <AdminOverview onNavigate={setActiveSection} />
-          )}
+          {activeSection === "overview" && <AdminOverview />}
 
           {activeSection === "users" && <UserManagement />}
 
           {activeSection === "jobs" && <JobManagement />}
 
-          {activeSection === "companies" && <CompanyManagement/>}
-
           {activeSection === "companies" && <CompanyManagement />}
 
           {activeSection === "application" && <ApplicationManagement />}
-          
-        
-          
         </div>
       </main>
     </div>

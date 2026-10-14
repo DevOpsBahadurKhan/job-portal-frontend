@@ -1,39 +1,29 @@
-
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { apiClient } from "@/lib/api";
 import type {
     SkillGapData,
     LearningRoadmapItem,
 } from "@/types/ISkillGap";
-import { ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
-
-export default function SkillGapPage() {
+function SkillGapContent() {
     const searchParams = useSearchParams();
     const jobIdParam = searchParams.get("jobId");
-
     const [data, setData] = useState<SkillGapData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [jobIdInput, setJobIdInput] = useState(jobIdParam ?? "");
-
     const loadSkillGap = useCallback(async (jobId?: number) => {
         setLoading(true);
         setError("");
-
         try {
             const response = await apiClient.getSkillGap(jobId);
-
             if (!response.success || !response.data) {
                 throw new Error(
                     response.error || "Unable to load skill gap analysis."
                 );
             }
-
             setData(response.data);
         } catch (err) {
             setData(null);
@@ -46,37 +36,29 @@ export default function SkillGapPage() {
             setLoading(false);
         }
     }, []);
-
     useEffect(() => {
         if (jobIdParam && !/^[1-9]\d*$/.test(jobIdParam)) {
             setError("Invalid job ID.");
             setLoading(false);
             return;
         }
-
         void loadSkillGap(
             jobIdParam ? Number(jobIdParam) : undefined
         );
     }, [jobIdParam, loadSkillGap]);
-
     const handleJobSearch = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
-
         const trimmed = jobIdInput.trim();
-
         if (!trimmed) {
             void loadSkillGap();
             return;
         }
-
         if (!/^[1-9]\d*$/.test(trimmed)) {
             setError("Please enter a valid positive job ID.");
             return;
         }
-
         void loadSkillGap(Number(trimmed));
     };
-
     if (loading) {
         return (
             <main className="mx-auto max-w-6xl px-4 py-12">
@@ -86,7 +68,6 @@ export default function SkillGapPage() {
             </main>
         );
     }
-
     if (error && !data) {
         return (
             <main className="mx-auto max-w-6xl px-4 py-12">
@@ -105,20 +86,15 @@ export default function SkillGapPage() {
             </main>
         );
     }
-
     return (
         <main className="min-h-screen bg-gray-50">
             <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-             
                 {/* HEADER */}
-               <Header />
-
-
+                <Header />
                 <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                     <h2 className="text-lg font-semibold text-gray-900">
                         Analyze for a Job
                     </h2>
-
                     <form
                         onSubmit={handleJobSearch}
                         className="mt-4 flex flex-col gap-3 sm:flex-row"
@@ -132,14 +108,12 @@ export default function SkillGapPage() {
                             placeholder="Enter job ID, e.g. 11"
                             className="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                         />
-
                         <button
                             type="submit"
                             className="rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700"
                         >
                             Analyze Job
                         </button>
-
                         <button
                             type="button"
                             onClick={() => {
@@ -151,10 +125,8 @@ export default function SkillGapPage() {
                             General Analysis
                         </button>
                     </form>
-
                     {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
                 </section>
-
                 {data && (
                     <>
                         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -162,7 +134,6 @@ export default function SkillGapPage() {
                             <h2 className="mt-1 break-words text-lg font-semibold text-gray-900">
                                 {data.resume.fileName}
                             </h2>
-
                             {data.targetJob && (
                                 <p className="mt-2 text-sm text-gray-600">
                                     Target role:{" "}
@@ -171,7 +142,6 @@ export default function SkillGapPage() {
                                     </span>
                                 </p>
                             )}
-
                             <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
                                 <SummaryCard
                                     title="Your Skills"
@@ -190,7 +160,6 @@ export default function SkillGapPage() {
                                 />
                             </div>
                         </section>
-
                         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                             <SkillSection
                                 title="Matched Skills"
@@ -198,7 +167,6 @@ export default function SkillGapPage() {
                                 emptyMessage="Run a job-specific analysis to see matched skills."
                                 color="green"
                             />
-
                             <SkillSection
                                 title="Skills to Learn"
                                 skills={data.missingSkills}
@@ -206,7 +174,6 @@ export default function SkillGapPage() {
                                 color="orange"
                             />
                         </div>
-
                         {data.requiredSkills && (
                             <SkillSection
                                 title="Job Required Skills"
@@ -215,7 +182,6 @@ export default function SkillGapPage() {
                                 color="blue"
                             />
                         )}
-
                         <section className="space-y-5">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">
@@ -226,7 +192,6 @@ export default function SkillGapPage() {
                                     skill gaps.
                                 </p>
                             </div>
-
                             {data.learningRoadmap?.length ? (
                                 <div className="space-y-5">
                                     {data.learningRoadmap.map((item) => (
@@ -256,12 +221,10 @@ export default function SkillGapPage() {
                                 </div>
                             )}
                         </section>
-
                         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
                             <h2 className="text-lg font-semibold text-gray-900">
                                 Additional Recommendations
                             </h2>
-
                             {data.recommendations.length > 0 ? (
                                 <ul className="mt-4 list-disc space-y-2 pl-5 text-gray-700">
                                     {data.recommendations.map((recommendation, index) => (
@@ -282,7 +245,6 @@ export default function SkillGapPage() {
         </main>
     );
 }
-
 function SummaryCard({
     title,
     count,
@@ -297,7 +259,6 @@ function SummaryCard({
         green: "bg-green-50 text-green-700",
         orange: "bg-orange-50 text-orange-700",
     };
-
     return (
         <div className={`rounded-xl p-4 ${styles[color]}`}>
             <p className="text-sm font-medium">{title}</p>
@@ -305,7 +266,6 @@ function SummaryCard({
         </div>
     );
 }
-
 function SkillSection({
     title,
     skills,
@@ -322,11 +282,9 @@ function SkillSection({
         green: "border-green-200 bg-green-50 text-green-800",
         orange: "border-orange-200 bg-orange-50 text-orange-800",
     };
-
     return (
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-
             {skills.length ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                     {skills.map((skill) => (
@@ -344,7 +302,6 @@ function SkillSection({
         </section>
     );
 }
-
 function RoadmapCard({ item }: { item: LearningRoadmapItem }) {
     return (
         <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
@@ -357,12 +314,10 @@ function RoadmapCard({ item }: { item: LearningRoadmapItem }) {
                         {item.skill}
                     </h3>
                 </div>
-
                 <span className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700">
                     {item.estimatedDuration}
                 </span>
             </div>
-
             <div className="mt-5">
                 <h4 className="font-semibold text-gray-900">Topics to learn</h4>
                 <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-600">
@@ -371,14 +326,12 @@ function RoadmapCard({ item }: { item: LearningRoadmapItem }) {
                     ))}
                 </ul>
             </div>
-
             <div className="mt-5 rounded-xl bg-gray-50 p-4">
                 <h4 className="font-semibold text-gray-900">Practical task</h4>
                 <p className="mt-1 text-sm leading-6 text-gray-600">
                     {item.practicalTask}
                 </p>
             </div>
-
             <div className="mt-4">
                 <h4 className="font-semibold text-gray-900">Expected outcome</h4>
                 <p className="mt-1 text-sm leading-6 text-gray-600">
@@ -386,5 +339,20 @@ function RoadmapCard({ item }: { item: LearningRoadmapItem }) {
                 </p>
             </div>
         </article>
+    );
+}
+export default function SkillGapPage() {
+    return (
+        <Suspense
+            fallback={
+                <main className="mx-auto max-w-6xl px-4 py-12">
+                    <p className="text-sm text-gray-500">
+                        Loading skill gap analysis...
+                    </p>
+                </main>
+            }
+        >
+            <SkillGapContent />
+        </Suspense>
     );
 }

@@ -10,18 +10,20 @@ import {
     ArrowUpRight,
 } from "lucide-react";
 
+export interface Job {
+    id: string;
+    title: string;
+    description: string;
+    location: string;
+    salaryMin?: number | null;
+    salaryMax?: number | null;
+    jobType: string;
+    status: string;
+    skills: string;
+}
+
 interface JobCardProps {
-    job: {
-        id: string;
-        title: string;
-        description: string;
-        location: string;
-        salaryMin?: number | null;
-        salaryMax?: number | null;
-        jobType: string;
-        status: string;
-        skills: string;
-    };
+    job: Job;
     canManage: boolean;
     isDeleting: boolean;
     onDelete: (jobId: string) => void;

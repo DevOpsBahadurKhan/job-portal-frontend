@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import AdminSidebar from "./Candidate/CandidateSidebar";
-import AdminOverview from "./Candidate/CandidateOverview";
+import CandidateSidebar from "./Candidate/CandidateSidebar";
+import CandidateOverview from "./Candidate/CandidateOverview";
 import JobManagement from "./Candidate/JobManagement";
-import CompanyManagement from "./Candidate/CompanyManagement";
 import ApplicationManagement from "./Candidate/ApplicationsManagement";
 
-export type ActiveSection = "overview" | "jobs" | "companies" | "application";
+export type ActiveSection =
+    | "overview"
+    | "jobs"
+    | "companies"
+    | "application";
 
-export default function AdminDashboard() {
+export default function CandidateDashboard() {
     const [activeSection, setActiveSection] =
         useState<ActiveSection>("overview");
 
@@ -24,7 +27,7 @@ export default function AdminDashboard() {
 
     return (
         <div className="flex min-h-[calc(100vh-64px)] w-full bg-slate-50">
-            <AdminSidebar
+            <CandidateSidebar
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
                 collapsed={collapsed}
@@ -36,7 +39,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between gap-4">
                         <div>
                             <div className="mb-1 text-xs text-slate-400">
-                                Admin / {sectionTitles[activeSection]}
+                                Candidate / {sectionTitles[activeSection]}
                             </div>
 
                             <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
@@ -47,20 +50,13 @@ export default function AdminDashboard() {
                 </header>
 
                 <div className="p-5 sm:p-8">
-                    {activeSection === "overview" && (
-                        <AdminOverview onNavigate={setActiveSection} />
-                    )}
+                    {activeSection === "overview" && <CandidateOverview />}
 
                     {activeSection === "jobs" && <JobManagement />}
 
-                    {activeSection === "companies" && <CompanyManagement />}
-
-                    {activeSection === "companies" && <CompanyManagement />}
+                   
 
                     {activeSection === "application" && <ApplicationManagement />}
-
-
-
                 </div>
             </main>
         </div>

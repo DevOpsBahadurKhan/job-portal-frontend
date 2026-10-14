@@ -71,7 +71,7 @@ const getChangedFields = (
   ] as const;
   stringFields.forEach((field) => {
     if (original[field] !== current[field]) {
-      changes[field] = current[field].trim() || null;
+      changes[field] = current[field].trim();
     }
   });
   const listFields = [
@@ -99,7 +99,7 @@ const getChangedFields = (
   salaryFields.forEach((field) => {
     if (original[field] !== current[field]) {
       const value = current[field].trim();
-      const parsedValue = value === "" ? null : Number(value);
+      const parsedValue = value === "" ? undefined : Number(value);
       if (field === "expectedSalaryMin") {
         changes.expectedSalaryMin = parsedValue;
       } else {
@@ -148,6 +148,7 @@ function extractProfile(input: unknown): CandidateProfile {
     break;
   }
   toast.error("Unable to find candidate profile in API response.");
+throw new Error("Unable to find candidate profile in API response.");
 }
 
 function extractProfilePhoto(input: unknown): string | null {

@@ -1,6 +1,4 @@
-
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -17,10 +15,8 @@ import {
   AlertCircle,
   CheckCircle2,
 } from "lucide-react";
-
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
-
 interface Company {
   id: number;
   name: string;
@@ -31,112 +27,96 @@ interface Company {
   createdAt: string;
   updatedAt?: string;
 }
-
 interface CompanyFormData {
   name: string;
   description: string;
   website: string;
   location: string;
 }
-
 const initialForm: CompanyFormData = {
   name: "",
   description: "",
   website: "",
   location: "",
 };
-
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10";
-
 const labelClass =
   "mb-2 block text-sm font-medium text-slate-700";
-
 export default function CompanyManagement() {
   const router = useRouter();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
-
   const role = user?.role;
   const isRecruiter = role === "RECRUITER";
   const isAdmin = role === "ADMIN" || role === "SUPER_ADMIN";
   const canManageCompanies = isRecruiter || isAdmin;
-
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
   const [formData, setFormData] =
     useState<CompanyFormData>(initialForm);
   const [formError, setFormError] = useState("");
   const [formLoading, setFormLoading] = useState(false);
-
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-
   const fetchCompanies = useCallback(
     async (isRefresh = false) => {
       if (!canManageCompanies) {
         setLoading(false);
         return;
       }
-
       if (isRefresh) {
         setRefreshing(true);
       } else {
         setLoading(true);
       }
-
       setError("");
-
       try {
         if (isRecruiter) {
           // Recruiter ko platform ki saari companies nahi,
           // sirf uski own company fetch karni hai.
           const response = await apiClient.getMyCompany();
-
           if (response.success && response.data) {
-            const data = response.data as Company | { company?: Company };
-            const company =
-              "company" in data ? data.company : data;
-
+            const data = response.data as
+              | Company
+              | { company?: Company | null };
+            // Explicit typing prevents the wrapper object from being inferred as a Company.
+            let company: Company | undefined;
+            if ("company" in data) {
+              company = data.company ?? undefined;
+            } else {
+              company = data as Company;
+            }
             setCompanies(company ? [company] : []);
             return;
           }
-
           const message = response.error || "Failed to load your company.";
           const normalizedMessage = message.toLowerCase();
-
           // Backend agar company absent hone par 404 deta hai,
           // to recruiter ko create-company state dikhayenge.
           const companyMissing =
             normalizedMessage.includes("404") ||
             normalizedMessage.includes("not found") ||
             normalizedMessage.includes("no company");
-
           if (companyMissing) {
             setCompanies([]);
           } else {
             setError(message);
           }
-
           return;
         }
-
         const response = await apiClient.listCompanies();
-
         if (response.success && response.data) {
           const data = response.data as
             | Company[]
-            | { companies?: Company[] };
-
-          const list = Array.isArray(data)
+            | { companies?: Company[] | null };
+          const list: Company[] = Array.isArray(data)
             ? data
             : data.companies ?? [];
-
           setCompanies(list);
         } else {
           setError(response.error || "Failed to load companies.");
@@ -150,20 +130,16 @@ export default function CompanyManagement() {
     },
     [canManageCompanies, isRecruiter]
   );
-
   useEffect(() => {
     if (authLoading) return;
-
     if (!isAuthenticated) {
       router.replace("/login");
       return;
     }
-
     if (!canManageCompanies) {
       router.replace("/jobs");
       return;
     }
-
     void fetchCompanies();
   }, [
     authLoading,
@@ -172,14 +148,12 @@ export default function CompanyManagement() {
     router,
     fetchCompanies,
   ]);
-
   const resetForm = () => {
     setFormData(initialForm);
     setFormError("");
     setShowCreateForm(false);
     setEditCompany(null);
   };
-
   const openCreateForm = () => {
     setError("");
     setSuccess("");
@@ -188,7 +162,6 @@ export default function CompanyManagement() {
     setEditCompany(null);
     setShowCreateForm(true);
   };
-
   const openEditForm = (company: Company) => {
     setError("");
     setSuccess("");
@@ -202,7 +175,6 @@ export default function CompanyManagement() {
       location: company.location ?? "",
     });
   };
-
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>
   ) => {
@@ -210,21 +182,17 @@ export default function CompanyManagement() {
     setFormError("");
     setError("");
     setSuccess("");
-
     const name = formData.name.trim();
-
     if (!name) {
       setFormError("Company name is required.");
       return;
     }
-
     const payload = {
       name,
       description: formData.description.trim(),
       website: formData.website.trim(),
       location: formData.location.trim(),
     };
-
     if (
       payload.website &&
       !/^https?:\/\//i.test(payload.website)
@@ -232,14 +200,11 @@ export default function CompanyManagement() {
       setFormError("Website URL must start with https:// or http://.");
       return;
     }
-
     setFormLoading(true);
-
     try {
       const response = editCompany
         ? await apiClient.updateCompany(editCompany.id, payload)
         : await apiClient.createCompany(payload);
-
       if (!response.success) {
         setFormError(
           response.error ||
@@ -247,17 +212,13 @@ export default function CompanyManagement() {
         );
         return;
       }
-
       const wasEditing = Boolean(editCompany);
-
       resetForm();
-
       setSuccess(
         wasEditing
           ? "Company updated successfully."
           : "Company created successfully."
       );
-
       await fetchCompanies(true);
     } catch {
       setFormError(
@@ -268,34 +229,26 @@ export default function CompanyManagement() {
       setFormLoading(false);
     }
   };
-
   const handleDelete = async (company: Company) => {
     const confirmed = window.confirm(
       `Are you sure you want to delete "${company.name}"? This action cannot be undone.`
     );
-
     if (!confirmed) return;
-
     setDeletingId(company.id);
     setError("");
     setSuccess("");
-
     try {
       const response = await apiClient.deleteCompany(company.id);
-
       if (!response.success) {
         setError(response.error || "Failed to delete company.");
         return;
       }
-
       setCompanies((current) =>
         current.filter((item) => item.id !== company.id)
       );
-
       if (editCompany?.id === company.id) {
         resetForm();
       }
-
       setSuccess("Company deleted successfully.");
     } catch {
       setError("Something went wrong while deleting the company.");
@@ -303,17 +256,14 @@ export default function CompanyManagement() {
       setDeletingId(null);
     }
   };
-
   const filteredCompanies = companies.filter((company) => {
     const query = searchTerm.trim().toLowerCase();
-
     return (
       company.name.toLowerCase().includes(query) ||
       (company.location ?? "").toLowerCase().includes(query) ||
       (company.description ?? "").toLowerCase().includes(query)
     );
   });
-
   if (authLoading || loading) {
     return (
       <div className="flex min-h-64 items-center justify-center">
@@ -324,14 +274,11 @@ export default function CompanyManagement() {
       </div>
     );
   }
-
   if (!isAuthenticated || !canManageCompanies) {
     return null;
   }
-
   return (
     <section className="space-y-6 pb-8">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
@@ -340,18 +287,15 @@ export default function CompanyManagement() {
             <span>/</span>
             <span className="text-slate-700">Companies</span>
           </div>
-
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
             {isRecruiter ? "My Company" : "Company Management"}
           </h1>
-
           <p className="mt-2 text-sm text-slate-500">
             {isRecruiter
               ? "Manage your company profile and business details."
               : "View and manage companies registered on the platform."}
           </p>
         </div>
-
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -364,7 +308,6 @@ export default function CompanyManagement() {
             />
             Refresh
           </button>
-
           {(!isRecruiter || companies.length === 0) && (
             <button
               type="button"
@@ -378,8 +321,6 @@ export default function CompanyManagement() {
           )}
         </div>
       </div>
-
-      {/* Feedback */}
       {error && (
         <div
           role="alert"
@@ -396,7 +337,6 @@ export default function CompanyManagement() {
           </button>
         </div>
       )}
-
       {success && (
         <div
           role="status"
@@ -413,8 +353,6 @@ export default function CompanyManagement() {
           </button>
         </div>
       )}
-
-      {/* Create / Edit Form */}
       {(showCreateForm || editCompany) && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
@@ -426,7 +364,6 @@ export default function CompanyManagement() {
                   <Building2 className="h-5 w-5" />
                 )}
               </div>
-
               <div>
                 <h2 className="font-semibold text-slate-900">
                   {editCompany ? "Edit Company" : "Create Company"}
@@ -436,7 +373,6 @@ export default function CompanyManagement() {
                 </p>
               </div>
             </div>
-
             <button
               type="button"
               onClick={resetForm}
@@ -447,7 +383,6 @@ export default function CompanyManagement() {
               <X className="h-5 w-5" />
             </button>
           </div>
-
           <form onSubmit={handleSubmit} className="space-y-5 p-5 sm:p-6">
             {formError && (
               <div
@@ -457,7 +392,6 @@ export default function CompanyManagement() {
                 {formError}
               </div>
             )}
-
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label className={labelClass}>
@@ -479,7 +413,6 @@ export default function CompanyManagement() {
                   autoComplete="organization"
                 />
               </div>
-
               <div>
                 <label className={labelClass}>Location</label>
                 <div className="relative">
@@ -498,7 +431,6 @@ export default function CompanyManagement() {
                   />
                 </div>
               </div>
-
               <div className="md:col-span-2">
                 <label className={labelClass}>Website</label>
                 <div className="relative">
@@ -517,7 +449,6 @@ export default function CompanyManagement() {
                   />
                 </div>
               </div>
-
               <div className="md:col-span-2">
                 <label className={labelClass}>Description</label>
                 <textarea
@@ -538,7 +469,6 @@ export default function CompanyManagement() {
                 </p>
               </div>
             </div>
-
             <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -548,7 +478,6 @@ export default function CompanyManagement() {
               >
                 Cancel
               </button>
-
               <button
                 type="submit"
                 disabled={formLoading}
@@ -569,8 +498,6 @@ export default function CompanyManagement() {
           </form>
         </div>
       )}
-
-      {/* Summary */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -589,13 +516,11 @@ export default function CompanyManagement() {
                   : "Registered on the platform"}
               </p>
             </div>
-
             <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
               <Building2 className="h-6 w-6" />
             </div>
           </div>
         </div>
-
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -611,7 +536,6 @@ export default function CompanyManagement() {
                   : "Create a company profile to get started."}
               </p>
             </div>
-
             <div
               className={`rounded-2xl p-3 ${companies.length
                 ? "bg-emerald-50 text-emerald-600"
@@ -627,8 +551,6 @@ export default function CompanyManagement() {
           </div>
         </div>
       </div>
-
-      {/* Company List */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
@@ -641,7 +563,6 @@ export default function CompanyManagement() {
                 : "Search and manage registered company profiles."}
             </p>
           </div>
-
           {!isRecruiter && (
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
@@ -655,25 +576,21 @@ export default function CompanyManagement() {
             </div>
           )}
         </div>
-
         {companies.length === 0 ? (
           <div className="px-5 py-14 text-center sm:px-8">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
               <Building2 className="h-8 w-8" />
             </div>
-
             <h3 className="font-semibold text-slate-900">
               {isRecruiter
                 ? "Create your company profile"
                 : "No companies found"}
             </h3>
-
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
               {isRecruiter
                 ? "Add your company details to get started with company and job management."
                 : "There are no registered companies yet. Create one to get started."}
             </p>
-
             {!showCreateForm && (
               <button
                 type="button"
@@ -687,11 +604,10 @@ export default function CompanyManagement() {
           </div>
         ) : filteredCompanies.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-slate-500">
-            No companies match "{searchTerm}".
+            No companies match {searchTerm}.
           </div>
         ) : (
           <>
-            {/* Desktop table */}
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -707,7 +623,6 @@ export default function CompanyManagement() {
                     </th>
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-slate-100">
                   {filteredCompanies.map((company) => (
                     <tr
@@ -740,26 +655,22 @@ export default function CompanyManagement() {
                           </div>
                         </div>
                       </td>
-
                       <td className="px-6 py-4 text-sm text-slate-600">
                         <span className="inline-flex items-center gap-1.5">
                           <MapPin className="h-4 w-4 text-slate-400" />
                           {company.location || "Not specified"}
                         </span>
                       </td>
-
                       {!isRecruiter && (
                         <td className="px-6 py-4 text-sm text-slate-600">
                           #{company.ownerId}
                         </td>
                       )}
-
                       <td className="px-6 py-4 text-sm text-slate-600">
                         {company.createdAt
                           ? new Date(company.createdAt).toLocaleDateString()
                           : "—"}
                       </td>
-
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
                           <button
@@ -771,7 +682,6 @@ export default function CompanyManagement() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-
                           <button
                             type="button"
                             onClick={() => void handleDelete(company)}
@@ -794,8 +704,7 @@ export default function CompanyManagement() {
                 </tbody>
               </table>
             </div>
-
-            {/* Mobile cards */}
+            {/ Mobile cards /}
             <div className="grid gap-4 p-4 md:hidden">
               {filteredCompanies.map((company) => (
                 <article
@@ -806,7 +715,6 @@ export default function CompanyManagement() {
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                       <Building2 className="h-5 w-5" />
                     </div>
-
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-slate-900">
                         {company.name}
@@ -816,13 +724,11 @@ export default function CompanyManagement() {
                       </p>
                     </div>
                   </div>
-
                   <div className="mt-4 space-y-2 text-sm text-slate-600">
                     <p className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 shrink-0 text-slate-400" />
                       {company.location || "Location not specified"}
                     </p>
-
                     {company.website && (
                       <a
                         href={company.website}
@@ -834,14 +740,12 @@ export default function CompanyManagement() {
                         {company.website}
                       </a>
                     )}
-
                     {!isRecruiter && (
                       <p className="text-xs text-slate-400">
                         Owner ID: {company.ownerId}
                       </p>
                     )}
                   </div>
-
                   <div className="mt-4 flex gap-2 border-t border-slate-100 pt-4">
                     <button
                       type="button"
@@ -852,7 +756,6 @@ export default function CompanyManagement() {
                       <Pencil className="h-4 w-4" />
                       Edit
                     </button>
-
                     <button
                       type="button"
                       onClick={() => void handleDelete(company)}
@@ -872,7 +775,6 @@ export default function CompanyManagement() {
             </div>
           </>
         )}
-
         {refreshing && (
           <div className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
             Refreshing company data...

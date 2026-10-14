@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Toaster } from "sonner";
+
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -29,6 +31,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <AuthProvider>
           <NotificationProvider>
             {children}
+            <Toaster
+              position="bottom-right"
+              richColors
+              closeButton
+            />
           </NotificationProvider>
         </AuthProvider>
       </body>

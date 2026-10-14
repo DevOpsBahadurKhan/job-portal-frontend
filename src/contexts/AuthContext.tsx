@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, {
@@ -25,18 +24,23 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+
   login: (
     email: string,
     password: string,
-    name?: string
+    name?: string,
+    rememberMe?: boolean
   ) => Promise<AuthResponse>;
+
   register: (
     name: string,
     email: string,
     password: string,
     role?: string
   ) => Promise<AuthResponse>;
+
   logout: () => Promise<void>;
+
   loading: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
@@ -94,6 +98,7 @@ export function AuthProvider({
         requestId === requestIdRef.current
       ) {
         setUser(null);
+
         console.error(
           'Failed to restore user profile:',
           error
@@ -106,6 +111,14 @@ export function AuthProvider({
     }
   };
 
+  useEffect(() => {
+    console.log('Auth state:', {
+      user,
+      isAuthenticated: Boolean(user),
+      loading,
+    });
+  }, [user, loading]);
+
   // Restore user on initial mount
   useEffect(() => {
     void fetchUserProfile();
@@ -115,7 +128,8 @@ export function AuthProvider({
   const login = async (
     email: string,
     password: string,
-    name?: string
+    name?: string,
+    rememberMe: boolean = false
   ) => {
     setLoading(true);
 
@@ -124,6 +138,7 @@ export function AuthProvider({
         email,
         password,
         name,
+        rememberMe,
       });
 
       if (response.success && response.data) {
@@ -204,7 +219,10 @@ export function AuthProvider({
     try {
       await apiClient.logout();
     } catch (error) {
-      console.error('Logout API failed:', error);
+      console.error(
+        'Logout API failed:',
+        error
+      );
     } finally {
       router.replace('/login');
     }

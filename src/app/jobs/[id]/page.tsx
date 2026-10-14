@@ -6,6 +6,10 @@ import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import type {
+  Resume,
+  ResumeMatch,
+} from "@/types/IResume";
 
 interface Job {
   id: number;
@@ -37,6 +41,25 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showApplicationForm, setShowApplicationForm] = useState(false);
+
+  const [matching, setMatching] =
+    useState(false);
+
+  const [resumeMatch, setResumeMatch] =
+    useState<ResumeMatch | null>(null);
+
+  const [candidateResumes, setCandidateResumes] =
+    useState<Resume[]>([]);
+
+  const [selectedResumeId, setSelectedResumeId] =
+    useState<number | null>(null);
+
+  const [loadingResumes, setLoadingResumes] =
+    useState(false);
+
+  const [matchError, setMatchError] =
+    useState("");
+
   const [coverLetter, setCoverLetter] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [applying, setApplying] = useState(false);
@@ -55,6 +78,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     status: '',
     skills: ''
   });
+
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -101,6 +125,134 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       cancelled = true;
     };
   }, [jobId, isAuthenticated, user?.role]);
+
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      user?.role !== "CANDIDATE"
+    ) {
+      return;
+    }
+
+
+    const loadCandidateResumes =
+      async () => {
+        try {
+          setLoadingResumes(true);
+
+          const response =
+            await apiClient.getMyResumes();
+
+          if (
+            !response.success ||
+            !response.data
+          ) {
+            return;
+          }
+
+          const resumes =
+            response.data.filter(
+              (resume) =>
+                resume.status ===
+                "COMPLETED"
+            );
+
+          setCandidateResumes(
+            resumes
+          );
+
+          // Prefer default resume
+          const defaultResume =
+            resumes.find(
+              (resume) =>
+                resume.isDefault
+            );
+
+          if (defaultResume) {
+            setSelectedResumeId(
+              defaultResume.id
+            );
+          } else if (
+            resumes.length > 0
+          ) {
+            setSelectedResumeId(
+              resumes[0].id
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Failed to load resumes:",
+            error
+          );
+        } finally {
+          setLoadingResumes(false);
+        }
+      };
+
+    void loadCandidateResumes();
+  }, [
+    isAuthenticated,
+    user?.role,
+  ]);
+
+  const handleResumeMatch = async () => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+
+    if (user?.role !== "CANDIDATE") {
+      return;
+    }
+
+    if (!selectedResumeId) {
+      setMatchError(
+        "Please select a resume first."
+      );
+      return;
+    }
+
+    if (!jobId) {
+      setMatchError(
+        "Job information is not available."
+      );
+      return;
+    }
+
+    try {
+      setMatching(true);
+      setMatchError("");
+      setResumeMatch(null);
+
+      const response =
+        await apiClient.matchResumeWithJob(
+          selectedResumeId,
+          Number(jobId)
+        );
+
+      if (
+        !response.success ||
+        !response.data
+      ) {
+        throw new Error(
+          response.error ||
+          "Unable to match resume with this job"
+        );
+      }
+
+      setResumeMatch(
+        response.data
+      );
+    } catch (error) {
+      setMatchError(
+        error instanceof Error
+          ? error.message
+          : "Unable to calculate resume match"
+      );
+    } finally {
+      setMatching(false);
+    }
+  };
 
   const fetchJob = async (id: string) => {
     setLoading(true);
@@ -340,6 +492,158 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               ))}
             </div>
           </div>
+
+          {isAuthenticated &&
+            user?.role === "CANDIDATE" && (
+              <div className="mb-8 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-8">
+
+                <div className="mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-xl">
+                      🎯
+                    </div>
+
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">
+                        Resume Match
+                      </h2>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        See how well your resume
+                        matches this job.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RESUME SELECT */}
+
+                {loadingResumes ? (
+                  <div className="rounded-xl bg-white p-4 text-sm text-gray-500">
+                    Loading your resumes...
+                  </div>
+                ) : candidateResumes.length === 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+
+                    <p className="font-semibold text-amber-800">
+                      No completed resume found
+                    </p>
+
+                    <p className="mt-1 text-sm text-amber-700">
+                      Upload and analyze a resume
+                      before checking your job match.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(
+                          "/resume-analyzer"
+                        )
+                      }
+                      className="mt-4 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+                    >
+                      Go to Resume Analyzer
+                    </button>
+
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+
+                      <div className="flex-1">
+                        <label
+                          htmlFor="resume-match"
+                          className="mb-2 block text-sm font-semibold text-gray-700"
+                        >
+                          Select Resume
+                        </label>
+
+                        <select
+                          id="resume-match"
+                          value={
+                            selectedResumeId ??
+                            ""
+                          }
+                          onChange={(event) => {
+                            setSelectedResumeId(
+                              Number(
+                                event.target
+                                  .value
+                              )
+                            );
+
+                            setResumeMatch(
+                              null
+                            );
+
+                            setMatchError(
+                              ""
+                            );
+                          }}
+                          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        >
+                          <option value="">
+                            Select a resume
+                          </option>
+
+                          {candidateResumes.map(
+                            (resume) => (
+                              <option
+                                key={
+                                  resume.id
+                                }
+                                value={
+                                  resume.id
+                                }
+                              >
+                                {resume.fileName}
+                                {resume.isDefault
+                                  ? " — Default"
+                                  : ""}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={
+                          handleResumeMatch
+                        }
+                        disabled={
+                          matching ||
+                          !selectedResumeId
+                        }
+                        className="rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {matching
+                          ? "Analyzing..."
+                          : "Check Resume Match"}
+                      </button>
+
+                    </div>
+
+                    {/* ERROR */}
+
+                    {matchError && (
+                      <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {matchError}
+                      </div>
+                    )}
+
+                    {/* RESULT */}
+
+                    {resumeMatch && (
+                      <ResumeMatchResult
+                        match={resumeMatch}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
           {job.company && (
             <div className="mb-8 p-8 bg-gradient-to-br from-gray-50 to-blue-50 rounded-2xl border border-gray-200">
@@ -599,6 +903,220 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+function ResumeMatchResult({
+  match,
+}: {
+  match: ResumeMatch;
+}) {
+  const score =
+    match.matchScore ?? 0;
+
+  const scoreColor =
+    score >= 80
+      ? "text-emerald-600"
+      : score >= 60
+        ? "text-blue-600"
+        : score >= 40
+          ? "text-amber-600"
+          : "text-red-600";
+
+  const scoreBackground =
+    score >= 80
+      ? "bg-emerald-50 border-emerald-200"
+      : score >= 60
+        ? "bg-blue-50 border-blue-200"
+        : score >= 40
+          ? "bg-amber-50 border-amber-200"
+          : "bg-red-50 border-red-200";
+
+  return (
+    <div className="mt-6 border-t border-violet-100 pt-6">
+
+      {/* SCORE */}
+
+      <div
+        className={`rounded-2xl border p-6 ${scoreBackground}`}
+      >
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+          <div>
+            <p className="text-sm font-medium text-gray-500">
+              Resume Match Score
+            </p>
+
+            <p
+              className={`mt-1 text-5xl font-bold ${scoreColor}`}
+            >
+              {score}
+              <span className="text-2xl text-gray-400">
+                /100
+              </span>
+            </p>
+          </div>
+
+          <div className="text-sm text-gray-600">
+            {score >= 80
+              ? "Excellent match"
+              : score >= 60
+                ? "Good match"
+                : score >= 40
+                  ? "Moderate match"
+                  : "Low match"}
+          </div>
+        </div>
+      </div>
+
+      {/* SKILLS */}
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+
+        {/* MATCHED */}
+
+        <div className="rounded-xl border border-emerald-200 bg-white p-5">
+
+          <h3 className="font-semibold text-gray-900">
+            ✓ Matched Skills
+          </h3>
+
+          {match.matchedSkills &&
+            match.matchedSkills.length >
+            0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {match.matchedSkills.map(
+                (skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700"
+                  >
+                    {skill}
+                  </span>
+                )
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-400">
+              No matched skills found.
+            </p>
+          )}
+        </div>
+
+        {/* MISSING */}
+
+        <div className="rounded-xl border border-red-200 bg-white p-5">
+
+          <h3 className="font-semibold text-gray-900">
+            ! Missing Skills
+          </h3>
+
+          {match.missingSkills &&
+            match.missingSkills.length >
+            0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {match.missingSkills.map(
+                (skill) => (
+                  <span
+                    key={skill}
+                    className="rounded-full bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700"
+                  >
+                    {skill}
+                  </span>
+                )
+              )}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-400">
+              No missing skills.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* KEYWORDS */}
+
+      {(match.matchedKeywords?.length ||
+        match.missingKeywords?.length) && (
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <h3 className="font-semibold text-gray-900">
+                Matched Keywords
+              </h3>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(
+                  match.matchedKeywords ||
+                  []
+                ).map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="rounded-full bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700"
+                  >
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <h3 className="font-semibold text-gray-900">
+                Missing Keywords
+              </h3>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(
+                  match.missingKeywords ||
+                  []
+                ).map((keyword) => (
+                  <span
+                    key={keyword}
+                    className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700"
+                  >
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+      {/* RECOMMENDATIONS */}
+
+      {match.recommendations &&
+        match.recommendations.length >
+        0 && (
+          <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-5">
+
+            <h3 className="font-semibold text-gray-900">
+              Recommendations
+            </h3>
+
+            <ul className="mt-3 space-y-2">
+              {match.recommendations.map(
+                (
+                  recommendation,
+                  index
+                ) => (
+                  <li
+                    key={`${recommendation}-${index}`}
+                    className="text-sm leading-6 text-gray-700"
+                  >
+                    •{" "}
+                    {
+                      recommendation
+                    }
+                  </li>
+                )
+              )}
+            </ul>
+
+          </div>
+        )}
     </div>
   );
 }

@@ -5,24 +5,30 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:5000";
 
-export interface PaginationMeta {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-}
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  error?: string;
-  pagination?: PaginationMeta;
-}
+import { AIChatResponse } from "@/types/IAi";
+import { ApiResponse } from "@/types/IPaginationMeta";
+import {
+  CandidateProfile, UpdateCandidateProfile
+} from "@/types/IProfile";
+import {
+  Company, CreateCompanyInput, UpdateCompanyInput,
+} from "@/types/ICompany";
+import {
+  Resume,
+  ResumeAnalysisResponse,
+  ResumeMatch,
+} from "@/types/IResume";
+import { SkillGapData } from "@/types/ISkillGap";
+
+
+
+
+
 
 class ApiClient {
+
+
   private baseUrl: string;
   private csrfToken: string | null = null;
 
@@ -59,7 +65,6 @@ class ApiClient {
         credentials: "include",
       }
     );
-
     const contentType =
       response.headers.get("content-type") || "";
 
@@ -371,6 +376,7 @@ class ApiClient {
     name?: string;
     email: string;
     password: string;
+    rememberMe?: boolean;
   }) {
     // Clear any token cached from a previous session.
     this.clearCsrfToken();
@@ -402,14 +408,6 @@ class ApiClient {
     );
   }
 
-  async getMe() {
-    return this.request<any>(
-      "/api/auth/profile",
-      {
-        method: "GET",
-      }
-    );
-  }
 
   async logout(): Promise<void> {
     // Do not let any 401 response start a refresh during logout.
@@ -443,78 +441,6 @@ class ApiClient {
     );
   }
 
-  // =========================
-  // COMPANIES
-  // =========================
-
-  async getMyCompany() {
-    return this.request<any>(
-      "/api/companies/me",
-      {
-        method: "GET",
-      }
-    );
-  }
-
-  async listCompanies() {
-    return this.request<any>(
-      "/api/companies",
-      {
-        method: "GET",
-      }
-    );
-  }
-
-  async getCompanyById(id: number) {
-    return this.request<any>(
-      `/api/companies/${id}`,
-      {
-        method: "GET",
-      }
-    );
-  }
-
-  async createCompany(data: {
-    name: string;
-    description: string;
-    website: string;
-    location: string;
-  }) {
-    return this.request<any>(
-      "/api/companies",
-      {
-        method: "POST",
-        body: JSON.stringify(data),
-      }
-    );
-  }
-
-  async updateCompany(
-    id: number,
-    data: {
-      name: string;
-      description: string;
-      website: string;
-      location: string;
-    }
-  ) {
-    return this.request<any>(
-      `/api/companies/${id}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      }
-    );
-  }
-
-  async deleteCompany(id: number) {
-    return this.request<any>(
-      `/api/companies/${id}`,
-      {
-        method: "DELETE",
-      }
-    );
-  }
 
   // =========================
   // JOBS
@@ -737,6 +663,90 @@ class ApiClient {
     );
   }
 
+
+  // =========================
+  // RECRUITER APPLICATIONS
+  // =========================
+
+  async getRecruiterApplications() {
+    return this.request<any[]>(
+      "/api/application/recruiter",
+      { method: "GET" }
+    );
+  }
+
+  async updateApplicationStatus(
+    applicationId: number,
+    status: "APPLIED" | "SHORTLISTED" | "REJECTED" | "HIRED"
+  ) {
+    return this.request<any>(
+      `/api/application/recruiter/${applicationId}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }
+    );
+  }
+
+  // =========================
+  // INTERVIEWS
+  // =========================
+
+  async createInterview(
+    applicationId: number,
+    data: {
+      scheduledAt: string;
+      durationMinutes: number;
+      mode: "ONLINE" | "PHONE" | "IN_PERSON";
+      meetingLink?: string;
+      location?: string;
+      notes?: string;
+    }
+  ) {
+    return this.request<any>(
+      `/api/interviews/applications/${applicationId}`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async getApplicationInterviews(applicationId: number) {
+    return this.request<any[]>(
+      `/api/interviews/applications/${applicationId}`,
+      { method: "GET" }
+    );
+  }
+
+  async updateInterview(
+    interviewId: number,
+    data: {
+      scheduledAt?: string;
+      durationMinutes?: number;
+      mode?: "ONLINE" | "PHONE" | "IN_PERSON";
+      meetingLink?: string;
+      location?: string;
+      notes?: string;
+    }
+  ) {
+    return this.request<any>(
+      `/api/interviews/${interviewId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async cancelInterview(interviewId: number) {
+    return this.request<any>(
+      `/api/interviews/${interviewId}/cancel`,
+      { method: "PATCH" }
+    );
+  }
+
+
   // =========================
   // ADMIN
   // =========================
@@ -791,6 +801,325 @@ class ApiClient {
       }
     );
   }
+
+  async chatWithAI(message: string) {
+    return this.request<AIChatResponse>(
+      "/api/ai/chat",
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }
+    );
+  }
+
+
+
+  // =========================
+  // RESUMES
+  // =========================
+
+  async uploadResume(file: File) {
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    return this.request<Resume>(
+      "/api/resumes",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  }
+
+  async getMyResumes() {
+    return this.request<Resume[]>(
+      "/api/resumes",
+      {
+        method: "GET",
+      }
+    );
+  }
+
+  async getResumeAnalysis(resumeId: number) {
+    return this.request<ResumeAnalysisResponse>(
+      `/api/resumes/${resumeId}/analysis`,
+      {
+        method: "GET",
+      }
+    );
+  }
+
+  async setDefaultResume(resumeId: number) {
+    return this.request<Resume>(
+      `/api/resumes/${resumeId}/default`,
+      {
+        method: "PATCH",
+      }
+    );
+  }
+
+  async deleteResume(resumeId: number) {
+    return this.request<{
+      deletedResumeId: number;
+      newDefaultResumeId: number | null;
+    }>(
+      `/api/resumes/${resumeId}`,
+      {
+        method: "DELETE",
+      }
+    );
+  }
+
+  async matchResumeWithJob(
+    resumeId: number,
+    jobId: number
+  ) {
+    return this.request<ResumeMatch>(
+      `/api/resumes/${resumeId}/match/${jobId}`,
+      {
+        method: "POST",
+      }
+    );
+  }
+
+
+  async getSkillGap(jobId?: number) {
+    const query = jobId !== undefined
+      ? `?jobId=${encodeURIComponent(String(jobId))}`
+      : "";
+
+    return this.request<SkillGapData>(
+      `/api/skill-gap${query}`,
+      {
+        method: "GET",
+      }
+    );
+  }
+
+
+  async generateCareerGuidance(data: {
+    careerGoal: string;
+    interests: string[];
+    preferredWorkStyle: "REMOTE" | "HYBRID" | "ONSITE" | "ANY";
+  }) {
+    return this.request<{
+      assessment: {
+        careerGoal: string;
+        interests: string[];
+        preferredWorkStyle: string;
+      };
+      recommendations: {
+        careerPath: string;
+        currentLevel: string;
+        targetRole: string;
+        profileMismatch: {
+          detected: boolean;
+          details: string[];
+        };
+        summary: string;
+        skillGaps: {
+          skill: string;
+          priority: "HIGH" | "MEDIUM" | "LOW";
+          reason: string;
+          learningAction: string;
+        }[];
+        roadmap: {
+          phase: string;
+          duration: string;
+          focus: string;
+          tasks: string[];
+          completionCriteria: string[];
+        }[];
+        recommendedProjects: {
+          title: string;
+          description: string;
+          skillsPracticed: string[];
+        }[];
+        nextActions: string[];
+      };
+    }>("/api/career-guidance", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+
+
+  async getMyUsage() {
+    return this.request<{
+      plan: {
+        id: number;
+        name: string;
+      };
+      usage: {
+        aiAssistant: {
+          used: number;
+          limit: number;
+          remaining: number;
+        };
+        resumeAnalysis: {
+          used: number;
+          limit: number;
+          remaining: number;
+        };
+        skillGapAnalysis: {
+          used: number;
+          limit: number;
+          remaining: number;
+        };
+        careerGuidance: {
+          used: number;
+          limit: number;
+          remaining: number;
+        };
+      };
+      usagePeriod: {
+        start: string;
+        end: string;
+      };
+    }>("/api/usage/me", {
+      method: "GET",
+    });
+  }
+
+
+
+  async getMyCandidateProfile() {
+    return this.request<CandidateProfile>(
+      "/api/users/me/profile",
+      {
+        method: "GET",
+      }
+    );
+  }
+
+  async updateMyCandidateProfile(data: UpdateCandidateProfile) {
+    return this.request<CandidateProfile>(
+      "/api/users/me/profile",
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }
+    );
+  }
+
+  async updateProfilePhoto(file: File) {
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    return this.request<any>(
+      "/api/users/me/profile/photo",
+      {
+        method: "PATCH",
+        body: formData,
+      }
+    );
+  }
+
+  // =========================
+  // COMPANIES
+  // =========================
+
+  async getMyCompany() {
+    return this.request<Company>("/api/companies/me", {
+      method: "GET",
+    });
+  }
+
+  async listCompanies() {
+    return this.request<Company[]>("/api/companies", {
+      method: "GET",
+    });
+  }
+
+  async getCompanyById(id: number) {
+    return this.request<Company>(`/api/companies/${id}`, {
+      method: "GET",
+    });
+  }
+
+  async createCompany(data: CreateCompanyInput) {
+    return this.request<Company>("/api/companies", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateCompany(id: number, data: UpdateCompanyInput) {
+    return this.request<Company>(`/api/companies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCompany(id: number) {
+    return this.request<Company>(`/api/companies/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+
+
+  async trackSearch(keyword: string) {
+    return this.request<{ tracked: boolean }>("/api/search/track", {
+      method: "POST",
+      body: JSON.stringify({ keyword }),
+    });
+  }
+
+  async getPopularSearches(limit = 8) {
+    return this.request<
+      { keyword: string; searchCount: number }[]
+    >(`/api/search/popular?limit=${limit}`, {
+      method: "GET",
+    });
+  }
+
+  async getTopCompanies(limit = 5) {
+    return this.request<
+      {
+        id: number;
+        name: string;
+        description: string | null;
+        website: string | null;
+        location: string | null;
+        openJobsCount: number;
+      }[]
+    >(`/api/companies/top?limit=${limit}`, {
+      method: "GET",
+    });
+  }
+
+
+  // ==============================
+  // FORGOT PASSWORD
+  // ==============================
+  async forgotPassword(email: string) {
+    return this.request<{
+      message: string;
+    }>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  // ==============================
+  // RESET PASSWORD
+  // ==============================
+  async resetPassword(token: string, newPassword: string) {
+    return this.request<{
+      message: string;
+    }>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        token,
+        newPassword,
+      }),
+    });
+  }
+
 }
 
 export const apiClient = new ApiClient(API_URL);

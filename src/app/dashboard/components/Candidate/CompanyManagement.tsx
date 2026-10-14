@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Navbar from '@/components/Navbar';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -16,7 +15,7 @@ interface Company {
   createdAt: string;
 }
 
-export default function CompaniesPage() {
+export default function CompanyManagement() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -40,7 +39,7 @@ export default function CompaniesPage() {
     }
 
     // Only SUPER_ADMIN can access this page
-    if (user?.role !== 'SUPER_ADMIN') {
+    if (user?.role !== 'SUPER_ADMIN' && user?.role !== 'ADMIN') {
       router.push('/jobs');
       return;
     }
@@ -139,12 +138,7 @@ export default function CompaniesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Company Management Dashboard</h1>
-          <p className="mt-2 text-gray-600">Manage all companies on the platform</p>
-        </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

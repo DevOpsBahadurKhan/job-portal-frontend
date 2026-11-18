@@ -753,18 +753,42 @@ function JobsPageContent() {
 export default function JobsPage() {
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
+
   useEffect(() => {
-    if (loading) return;
-    if (!isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       router.replace("/login");
     }
   }, [isAuthenticated, loading, router]);
-  if (loading || !isAuthenticated) {
-    return <div className="min-h-screen bg-slate-50" />;
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+        <p className="mt-4 text-sm font-medium text-slate-600">
+          Checking your authentication...
+        </p>
+      </div>
+    );
   }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+        <p className="mt-4 text-sm text-slate-600">
+          Redirecting to login...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <Suspense
-      fallback={<div className="min-h-screen bg-slate-50" />}
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-50">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
+        </div>
+      }
     >
       <JobsPageContent />
     </Suspense>

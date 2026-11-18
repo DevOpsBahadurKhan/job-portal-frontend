@@ -11,7 +11,7 @@ export default function Home() {
   useEffect(() => {
     if (loading) return;
 
-    router.replace(isAuthenticated ? "/jobs" : "/login");
+    router.replace(isAuthenticated ? "/jobs" : "/jobs");
   }, [isAuthenticated, loading, router]);
 
   return (

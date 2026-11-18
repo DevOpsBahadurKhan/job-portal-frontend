@@ -16,14 +16,6 @@ const suggestions = [
     "Jobs with a salary above ₹10 LPA",
 ];
 
-// const futureFeatures = [
-
-//     {
-//         title: "Career Guidance",
-//         description: "Get personalized career suggestions",
-//         icon: "compass",
-//     },
-// ];
 
 function FeatureIcon({ type }: { type: string }) {
     if (type === "file") {

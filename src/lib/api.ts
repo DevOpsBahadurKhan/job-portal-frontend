@@ -1,18 +1,19 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 
 import { AIChatResponse } from "@/types/IAi";
 import { ApiResponse } from "@/types/IPaginationMeta";
 import {
-  CandidateProfile, UpdateCandidateProfile
+  CandidateProfile,
+  UpdateCandidateProfile
 } from "@/types/IProfile";
 import {
-  Company, CreateCompanyInput, UpdateCompanyInput,
+  Company,
+  CreateCompanyInput,
+  UpdateCompanyInput,
 } from "@/types/ICompany";
 import {
   Resume,
@@ -20,6 +21,7 @@ import {
   ResumeMatch,
 } from "@/types/IResume";
 import { SkillGapData } from "@/types/ISkillGap";
+import type { PlansResponse } from "@/types/IPlan";
 
 
 
@@ -1119,6 +1121,104 @@ class ApiClient {
       }),
     });
   }
+
+
+  // Add this method inside your existing ApiClient class.
+
+  async getPlans() {
+    return this.request<PlansResponse>("/api/plans", {
+      method: "GET",
+    });
+  }
+
+  async subscribeToPlan(planId: number) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      data: {
+        subscription: {
+          id: number;
+          planId: number;
+          status: string;
+          plan: {
+            id: number;
+            name: string;
+            price: number;
+            currency: string;
+            billingInterval: string;
+          };
+        };
+        requiresPayment: boolean;
+      };
+    }>("/api/subscriptions/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ planId }),
+    });
+  }
+
+
+  async createPaymentOrder(subscriptionId: number) {
+    return this.request<{
+      orderId: string;
+      amount: number;
+      currency: string;
+      razorpayKeyId: string;
+      paymentId: number;
+    }>("/api/payments/create-order", {
+      method: "POST",
+      body: JSON.stringify({ subscriptionId }),
+    });
+  }
+
+  async verifyPayment(data: {
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) {
+    return this.request<{
+      alreadyProcessed?: boolean;
+    }>("/api/payments/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMySubscription() {
+    return this.request<{
+      plan: {
+        id: number;
+        name: string;
+        description: string | null;
+        price: number;
+        currency: string;
+        billingInterval: string;
+        maxActiveJobs: number;
+      };
+      subscription: {
+        id: number;
+        status: string;
+        currentPeriodStart: string | null;
+        currentPeriodEnd: string | null;
+        cancelAtPeriodEnd: boolean;
+      } | null;
+      usage: Record<
+        string,
+        {
+          used: number;
+          limit: number;
+          remaining: number;
+        }
+      >;
+      usagePeriod: {
+        start: string;
+        end: string;
+      };
+    }>("/api/subscriptions/me", {
+      method: "GET",
+    });
+  }
+
+
 
 }
 

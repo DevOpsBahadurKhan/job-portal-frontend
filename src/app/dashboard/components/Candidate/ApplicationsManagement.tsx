@@ -1,12 +1,13 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { socket } from "@/lib/socket";
 
 interface Application {
     id: number;
@@ -14,6 +15,7 @@ interface Application {
     resumeUrl: string | null;
     status: string;
     createdAt: string;
+    updatedAt?: string;
 
     job: {
         id: number;
@@ -34,6 +36,7 @@ export default function ApplicationManagement() {
     const { user, isAuthenticated } = useAuth();
 
     const [applications, setApplications] = useState<Application[]>([]);
+    const applicationsRef = useRef<Application[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -49,30 +52,84 @@ export default function ApplicationManagement() {
         if (!user) return;
 
         fetchApplications();
+
     }, [isAuthenticated, user, router]);
+
 
     const fetchApplications = async () => {
         setLoading(true);
-        setError('');
+        setError("");
 
         try {
             const response = await apiClient.getMyApplications();
-            console.log(response);
-            
 
             if (response.success && response.data) {
+                applicationsRef.current = response.data;
                 setApplications(response.data);
             } else {
                 setError(
-                    response.error || 'Failed to fetch applications'
+                    response.error || "Failed to fetch applications"
                 );
             }
         } catch {
-            setError('An error occurred while fetching applications');
+            setError("An error occurred while fetching applications");
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (
+            !isAuthenticated ||
+            !user ||
+            user.role !== "CANDIDATE"
+        ) {
+            return;
+        }
+
+        const handleStatusUpdate = (update: {
+            applicationId: number;
+            status: string;
+            updatedAt?: string;
+        }) => {
+            const currentApplication = applicationsRef.current.find(
+                (application) =>
+                    application.id === Number(update.applicationId)
+            );
+
+            // Ignore unknown applications and duplicate status events.
+            if (
+                !currentApplication ||
+                currentApplication.status === update.status
+            ) {
+                return;
+            }
+
+            const updatedApplications = applicationsRef.current.map(
+                (application) =>
+                    application.id === Number(update.applicationId)
+                        ? {
+                            ...application,
+                            status: update.status,
+                            ...(update.updatedAt
+                                ? { updatedAt: update.updatedAt }
+                                : {}),
+                        }
+                        : application
+            );
+
+            applicationsRef.current = updatedApplications;
+            setApplications(updatedApplications);
+        };
+
+        socket.on("application:status-updated", handleStatusUpdate);
+
+        return () => {
+            socket.off("application:status-updated", handleStatusUpdate);
+        };
+    }, [isAuthenticated, user?.id, user?.role]);
+
+
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -168,6 +225,7 @@ export default function ApplicationManagement() {
                 )}
 
                 {/* Loading */}
+                
                 {loading ? (
                     <div className="text-center py-16 bg-white rounded-xl shadow-sm">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
@@ -186,7 +244,7 @@ export default function ApplicationManagement() {
                         </h2>
 
                         <p className="text-gray-600 mt-2 mb-6">
-                            You haven't applied to any jobs yet.
+                            You haven`t applied to any jobs yet.
                         </p>
 
                         <Link

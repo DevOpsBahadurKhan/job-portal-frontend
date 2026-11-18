@@ -6,6 +6,7 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { GoogleAnalytics } from '@next/third-parties/google';
+import ApplicationStatusNotifications from "@/components/notifications/ApplicationStatusNotifications";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <NotificationProvider>
+            <ApplicationStatusNotifications />
             {children}
             <Toaster
               position="bottom-right"

@@ -68,6 +68,11 @@ export function AuthProvider({
 
   // Restore logged-in user from access token cookie
   const fetchUserProfile = async () => {
+
+
+    
+
+    
     if (loggedOutRef.current) {
       setUser(null);
       setLoading(false);

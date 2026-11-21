@@ -45,7 +45,7 @@ function LoginPageContent() {
       if (result.success) {
         toast.success("Signed in successfully");
         router.replace("/jobs");
-        // router.replace("/jobs");
+        router.replace("/jobs");
       } else {
         toast.error("Login failed");
       }

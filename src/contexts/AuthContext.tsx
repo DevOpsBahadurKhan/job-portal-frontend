@@ -2,6 +2,7 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -55,6 +56,7 @@ export function AuthProvider({
 }: {
   children: React.ReactNode;
 }) {
+  
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,12 +69,8 @@ export function AuthProvider({
   const requestIdRef = useRef(0);
 
   // Restore logged-in user from access token cookie
-  const fetchUserProfile = async () => {
 
-
-    
-
-    
+  const fetchUserProfile = useCallback(async () => {
     if (loggedOutRef.current) {
       setUser(null);
       setLoading(false);
@@ -81,10 +79,11 @@ export function AuthProvider({
 
     const requestId = ++requestIdRef.current;
 
+    console.log("[Auth] Profile check started");
+
     try {
       const response = await apiClient.getProfile();
 
-      // Ignore response if logout or another request occurred
       if (
         loggedOutRef.current ||
         requestId !== requestIdRef.current
@@ -93,8 +92,10 @@ export function AuthProvider({
       }
 
       if (response.success && response.data) {
+        console.log("[Auth] User authenticated");
         setUser(response.data);
       } else {
+        console.log("[Auth] No active session");
         setUser(null);
       }
     } catch (error) {
@@ -102,19 +103,17 @@ export function AuthProvider({
         !loggedOutRef.current &&
         requestId === requestIdRef.current
       ) {
+        console.error("[Auth] Profile check failed:", error);
         setUser(null);
-
-        console.error(
-          'Failed to restore user profile:',
-          error
-        );
       }
     } finally {
       if (requestId === requestIdRef.current) {
+        console.log("[Auth] Profile check completed");
         setLoading(false);
       }
     }
-  };
+  }, []);
+
 
   useEffect(() => {
     console.log('Auth state:', {
@@ -122,12 +121,12 @@ export function AuthProvider({
       isAuthenticated: Boolean(user),
       loading,
     });
-  }, [user, loading]);
+  }, [user, loading, fetchUserProfile]);
 
   // Restore user on initial mount
   useEffect(() => {
     void fetchUserProfile();
-  }, []);
+  }, [fetchUserProfile]);
 
   // Login
   const login = async (

@@ -24,12 +24,14 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
   useEffect(() => {
     const error = searchParams.get("error");
     if (error) {
       toast.error(error);
     }
   }, [searchParams]);
+  
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -43,6 +45,7 @@ function LoginPageContent() {
       if (result.success) {
         toast.success("Signed in successfully");
         router.replace("/jobs");
+        // router.replace("/jobs");
       } else {
         toast.error("Login failed");
       }

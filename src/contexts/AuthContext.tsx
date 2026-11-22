@@ -1,7 +1,20 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+
 import { apiClient } from '@/lib/api';
+import { useRouter } from 'next/navigation';
+
+type AuthResponse = Awaited<
+  ReturnType<typeof apiClient.login>
+>;
 
 interface User {
   id: number;
@@ -12,94 +25,223 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (email: string, password: string, name?: string) => Promise<void>;
-  register: (name: string, email: string, password: string, role?: string) => Promise<void>;
-  logout: () => void;
+
+  login: (
+    email: string,
+    password: string,
+    name?: string,
+    rememberMe?: boolean
+  ) => Promise<AuthResponse>;
+
+  register: (
+    name: string,
+    email: string,
+    password: string,
+    role?: string
+  ) => Promise<AuthResponse>;
+
+  logout: () => Promise<void>;
+
   loading: boolean;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<
+  AuthContextType | undefined
+>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for existing token on mount
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      apiClient.setToken(storedToken);
-      // Fetch user profile to restore user data
-      fetchUserProfile();
-    }
-    setLoading(false);
-  }, []);
+  const router = useRouter();
 
-  const fetchUserProfile = async () => {
+  // Prevent profile restoration after logout
+  const loggedOutRef = useRef(false);
+
+  // Prevent stale profile responses from changing auth state
+  const requestIdRef = useRef(0);
+
+  // Restore logged-in user from access token cookie
+
+  const fetchUserProfile = useCallback(async () => {
+    if (loggedOutRef.current) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    const requestId = ++requestIdRef.current;
+
+    console.log("[Auth] Profile check started");
+
     try {
       const response = await apiClient.getProfile();
+
+      if (
+        loggedOutRef.current ||
+        requestId !== requestIdRef.current
+      ) {
+        return;
+      }
+
       if (response.success && response.data) {
+        console.log("[Auth] User authenticated");
         setUser(response.data);
+      } else {
+        console.log("[Auth] No active session");
+        setUser(null);
       }
     } catch (error) {
-      console.error('Failed to fetch user profile:', error);
-    }
-  };
-
-  const login = async (email: string, password: string, name?: string) => {
-    setLoading(true);
-    try {
-      const response = await apiClient.login({ email, password, name });
-      if (response.success && response.data) {
-        const newToken = response.data.token;
-        setToken(newToken);
-        apiClient.setToken(newToken);
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.error || 'Login failed');
+      if (
+        !loggedOutRef.current &&
+        requestId === requestIdRef.current
+      ) {
+        console.error("[Auth] Profile check failed:", error);
+        setUser(null);
       }
+    } finally {
+      if (requestId === requestIdRef.current) {
+        console.log("[Auth] Profile check completed");
+        setLoading(false);
+      }
+    }
+  }, []);
+
+
+  useEffect(() => {
+    console.log('Auth state:', {
+      user,
+      isAuthenticated: Boolean(user),
+      loading,
+    });
+  }, [user, loading, fetchUserProfile]);
+
+  // Restore user on initial mount
+  useEffect(() => {
+    void fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  // Login
+  const login = async (
+    email: string,
+    password: string,
+    name?: string,
+    rememberMe: boolean = false
+  ) => {
+    setLoading(true);
+
+    try {
+      const response = await apiClient.login({
+        email,
+        password,
+        name,
+        rememberMe,
+      });
+
+      if (response.success && response.data) {
+        // Allow authentication again after login
+        loggedOutRef.current = false;
+
+        // Reset API client's logout/refresh guard
+        apiClient.resetAuthState();
+
+        // Invalidate any previous profile requests
+        requestIdRef.current++;
+
+        setUser(response.data);
+
+        return response;
+      }
+
+      throw new Error(
+        response.error || 'Login failed'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const register = async (name: string, email: string, password: string, role?: string) => {
+  // Register
+  const register = async (
+    name: string,
+    email: string,
+    password: string,
+    role?: string
+  ) => {
     setLoading(true);
+
     try {
-      const response = await apiClient.register({ name, email, password, role });
+      const response = await apiClient.register({
+        name,
+        email,
+        password,
+        role,
+      });
+
       if (response.success && response.data) {
-        const newToken = response.data.token;
-        setToken(newToken);
-        apiClient.setToken(newToken);
-        setUser(response.data.user);
-      } else {
-        throw new Error(response.error || 'Registration failed');
+        loggedOutRef.current = false;
+
+        apiClient.resetAuthState();
+
+        requestIdRef.current++;
+
+        setUser(response.data);
+
+        return response;
       }
+
+      throw new Error(
+        response.error || 'Registration failed'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const logout = () => {
+  // Logout
+  const logout = async () => {
+    // Immediately stop profile restoration
+    loggedOutRef.current = true;
+
+    // Invalidate any pending profile response
+    requestIdRef.current++;
+
+    // Clear API client's refresh state
+    apiClient.markLoggedOut();
+
+    // Clear user from UI immediately
     setUser(null);
-    setToken(null);
-    apiClient.clearToken();
+    setLoading(false);
+
+    try {
+      await apiClient.logout();
+    } catch (error) {
+      console.error(
+        'Logout API failed:',
+        error
+      );
+    } finally {
+      router.replace('/login');
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
         login,
         register,
         logout,
         loading,
-        isAuthenticated: !!token,
+        isAuthenticated: Boolean(user),
+        refreshUser: fetchUserProfile,
       }}
     >
       {children}
@@ -109,8 +251,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
+
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error(
+      'useAuth must be used within AuthProvider'
+    );
   }
+
   return context;
 }

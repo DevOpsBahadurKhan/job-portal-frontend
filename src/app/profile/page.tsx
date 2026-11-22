@@ -1,14 +1,18 @@
 "use client";
 import { toast } from "sonner";
 import { useCallback, useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { profileSchema } from "@/lib/validations/profile.schema";
+import type { ProfileFormValues } from "@/lib/validations/profile.schema";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import {
+import type {
   CandidateProfile,
   UpdateCandidateProfile,
   ProfileForm,
-  ISctionProps
+  ISctionProps,
 } from "@/types/IProfile";
 const JOB_TYPES = [
   "FULL_TIME",
@@ -17,7 +21,6 @@ const JOB_TYPES = [
   "INTERNSHIP",
   "REMOTE",
 ] as const;
-
 const emptyForm: ProfileForm = {
   phone: "",
   headline: "",
@@ -30,8 +33,6 @@ const emptyForm: ProfileForm = {
   expectedSalaryMax: "",
   noticePeriod: "",
 };
-
-
 const profileToForm = (profile: CandidateProfile): ProfileForm => ({
   phone: profile.phone ?? "",
   headline: profile.headline ?? "",
@@ -50,13 +51,11 @@ const profileToForm = (profile: CandidateProfile): ProfileForm => ({
       : "",
   noticePeriod: profile.noticePeriod ?? "",
 });
-
 const parseList = (value: string): string[] =>
   value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-
 const getChangedFields = (
   original: ProfileForm,
   current: ProfileForm
@@ -109,7 +108,6 @@ const getChangedFields = (
   });
   return changes;
 };
-
 function extractProfile(input: unknown): CandidateProfile {
   let current: unknown = input;
   for (let i = 0; i < 5; i++) {
@@ -148,9 +146,8 @@ function extractProfile(input: unknown): CandidateProfile {
     break;
   }
   toast.error("Unable to find candidate profile in API response.");
-throw new Error("Unable to find candidate profile in API response.");
+  throw new Error("Unable to find candidate profile in API response.");
 }
-
 function extractProfilePhoto(input: unknown): string | null {
   let current: unknown = input;
   for (let i = 0; i < 5; i++) {
@@ -199,12 +196,10 @@ function extractProfilePhoto(input: unknown): string | null {
   }
   return null;
 }
-
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:bg-slate-50 disabled:text-slate-600 disabled:cursor-not-allowed";
 const labelClass =
   "mb-2 block text-sm font-semibold text-slate-700";
-
 function SectionHeading({
   title,
   description,
@@ -226,8 +221,6 @@ function SectionHeading({
     </div>
   );
 }
-
-
 export default function ProfilePage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -237,8 +230,19 @@ export default function ProfilePage() {
     useState<string | null>(null);
   const [photoUploading, setPhotoUploading] =
     useState(false);
-  const [form, setForm] =
-    useState<ProfileForm>(emptyForm);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    getValues,
+    formState: { errors, isDirty },
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: emptyForm,
+    mode: "onTouched",
+  });
   const [originalForm, setOriginalForm] =
     useState<ProfileForm>(emptyForm);
   const [loading, setLoading] =
@@ -249,7 +253,6 @@ export default function ProfilePage() {
     useState(false);
   const loadProfile = useCallback(async () => {
     setLoading(true);
-    
     try {
       const response = await apiClient.getMyCandidateProfile();
       if (!response.success || !response.data) {
@@ -260,7 +263,8 @@ export default function ProfilePage() {
       const photo = extractProfilePhoto(response.data);
       setProfile(data);
       setProfilePhoto(photo);
-      setForm(formData);
+      reset(formData);
+      setOriginalForm(formData);
     } catch (error) {
       console.error("Failed to load candidate profile:", error);
       toast.error(error instanceof Error
@@ -269,34 +273,28 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reset]);
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
   const handleChange = (
-    field: keyof ProfileForm,
+    field: keyof ProfileFormValues,
     value: string
   ) => {
-    setForm((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
+    setValue(field, value, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   };
   const handleJobTypeChange = (
     type: (typeof JOB_TYPES)[number],
     checked: boolean
   ) => {
-    const selected =
-      parseList(form.preferredJobTypes);
+    const selected = parseList(getValues("preferredJobTypes"));
     const updated = checked
       ? [...selected, type]
-      : selected.filter(
-        (item) => item !== type
-      );
-    handleChange(
-      "preferredJobTypes",
-      [...new Set(updated)].join(", ")
-    );
+      : selected.filter((item) => item !== type);
+    handleChange("preferredJobTypes", [...new Set(updated)].join(", "));
   };
   const handlePhotoChange = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -358,64 +356,16 @@ export default function ProfilePage() {
     }
   };
   const handleCancel = () => {
-    setForm(originalForm);
+    reset(originalForm);
     setEditing(false);
   };
-  const handleSave = async () => {
-    const selectedJobTypes =
-      parseList(
-        form.preferredJobTypes
-      );
-    const invalidJobTypes =
-      selectedJobTypes.filter(
-        (type) =>
-          !JOB_TYPES.includes(
-            type as (typeof JOB_TYPES)[number]
-          )
-      );
-    if (invalidJobTypes.length > 0) {
-      toast.error(`Invalid job types: ${invalidJobTypes.join(
-        ", "
-      )}`);
-      return;
-    }
-    const changes =
-      getChangedFields(
-        originalForm,
-        form
-      );
+  const handleSave = async (currentForm: ProfileFormValues) => {
+    const changes = getChangedFields(originalForm, currentForm);
     if (
       Object.keys(changes).length === 0
     ) {
       toast.success("No changes to save.");
       setEditing(false);
-      return;
-    }
-    if (
-      (changes.expectedSalaryMin != null &&
-        changes.expectedSalaryMin < 0) ||
-      (changes.expectedSalaryMax != null &&
-        changes.expectedSalaryMax < 0)
-    ) {
-      toast.error("Salary cannot be negative.");
-      return;
-    }
-    const minSalary =
-      changes.expectedSalaryMin !==
-        undefined
-        ? changes.expectedSalaryMin
-        : profile?.expectedSalaryMin;
-    const maxSalary =
-      changes.expectedSalaryMax !==
-        undefined
-        ? changes.expectedSalaryMax
-        : profile?.expectedSalaryMax;
-    if (
-      minSalary != null &&
-      maxSalary != null &&
-      minSalary > maxSalary
-    ) {
-      toast.error("Minimum salary cannot exceed maximum salary.");
       return;
     }
     setSaving(true);
@@ -441,13 +391,9 @@ export default function ProfilePage() {
         profileToForm(
           updatedProfile
         );
-      setProfile(
-        updatedProfile
-      );
-      setForm(updatedForm);
-      setOriginalForm(
-        updatedForm
-      );
+      setProfile(updatedProfile);
+      reset(updatedForm);
+      setOriginalForm(updatedForm);
       setEditing(false);
       toast.success("Profile updated successfully.");
     } catch (err) {
@@ -588,8 +534,8 @@ export default function ProfilePage() {
                     {profilePhoto ? (
                       <img
                         src={
-                          profilePhoto.startsWith("http\://") ||
-                            profilePhoto.startsWith("https\://")
+                          profilePhoto.startsWith("http://") ||
+                            profilePhoto.startsWith("https://")
                             ? profilePhoto
                             : `${process.env.NEXT_PUBLIC_API_URL}${profilePhoto.startsWith("/") ? "" : "/"}${profilePhoto}`
                         }
@@ -688,13 +634,7 @@ export default function ProfilePage() {
                       <input
                         id={field.key}
                         type={field.type}
-                        value={form[field.key]}
-                        onChange={(event) =>
-                          handleChange(
-                            field.key,
-                            event.target.value
-                          )
-                        }
+                        {...register(field.key)}
                         disabled={
                           !editing || saving
                         }
@@ -703,6 +643,11 @@ export default function ProfilePage() {
                         }
                         className={inputClass}
                       />
+                      {errors[field.key] && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {errors[field.key]?.message}
+                        </p>
+                      )}
                     </div>
                   )
                 )}
@@ -723,19 +668,16 @@ export default function ProfilePage() {
               <textarea
                 id="summary"
                 rows={7}
-                value={form.summary}
-                onChange={(event) =>
-                  handleChange(
-                    "summary",
-                    event.target.value
-                  )
-                }
+                {...register("summary")}
                 disabled={!editing || saving}
                 placeholder="Write a short summary about your experience, technical skills and career goals..."
                 className={`${inputClass} min-h-40 resize-y leading-6`}
               />
+              {errors.summary && (
+                <p className="mt-1 text-xs text-red-600">{errors.summary.message}</p>
+              )}
               <p className="mt-2 text-right text-xs text-slate-400">
-                {form.summary.length} characters
+                {watch("summary").length} characters
               </p>
             </section>
           </div>
@@ -759,13 +701,7 @@ export default function ProfilePage() {
                       <input
                         id={field.key}
                         type={field.type}
-                        value={form[field.key]}
-                        onChange={(event) =>
-                          handleChange(
-                            field.key,
-                            event.target.value
-                          )
-                        }
+                        {...register(field.key)}
                         disabled={
                           !editing || saving
                         }
@@ -774,6 +710,11 @@ export default function ProfilePage() {
                         }
                         className={inputClass}
                       />
+                      {errors[field.key] && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {errors[field.key]?.message}
+                        </p>
+                      )}
                       <p className="mt-1.5 text-xs text-slate-400">
                         Separate multiple values with commas.
                       </p>
@@ -789,7 +730,7 @@ export default function ProfilePage() {
                   {JOB_TYPES.map((type) => {
                     const checked =
                       parseList(
-                        form.preferredJobTypes
+                        watch("preferredJobTypes")
                       ).includes(type);
                     return (
                       <label
@@ -824,6 +765,11 @@ export default function ProfilePage() {
                     );
                   })}
                 </div>
+                {errors.preferredJobTypes && (
+                  <p className="mt-2 text-xs text-red-600">
+                    {errors.preferredJobTypes.message}
+                  </p>
+                )}
               </div>
             </section>
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -848,15 +794,7 @@ export default function ProfilePage() {
                       id="expectedSalaryMin"
                       type="number"
                       min="0"
-                      value={
-                        form.expectedSalaryMin
-                      }
-                      onChange={(event) =>
-                        handleChange(
-                          "expectedSalaryMin",
-                          event.target.value
-                        )
-                      }
+                      {...register("expectedSalaryMin")}
                       disabled={
                         !editing || saving
                       }
@@ -864,6 +802,9 @@ export default function ProfilePage() {
                       className={`${inputClass} pl-9`}
                     />
                   </div>
+                  {errors.expectedSalaryMin && (
+                    <p className="mt-1 text-xs text-red-600">{errors.expectedSalaryMin.message}</p>
+                  )}
                 </div>
                 <div>
                   <label
@@ -880,15 +821,7 @@ export default function ProfilePage() {
                       id="expectedSalaryMax"
                       type="number"
                       min="0"
-                      value={
-                        form.expectedSalaryMax
-                      }
-                      onChange={(event) =>
-                        handleChange(
-                          "expectedSalaryMax",
-                          event.target.value
-                        )
-                      }
+                      {...register("expectedSalaryMax")}
                       disabled={
                         !editing || saving
                       }
@@ -896,6 +829,9 @@ export default function ProfilePage() {
                       className={`${inputClass} pl-9`}
                     />
                   </div>
+                  {errors.expectedSalaryMax && (
+                    <p className="mt-1 text-xs text-red-600">{errors.expectedSalaryMax.message}</p>
+                  )}
                 </div>
               </div>
               <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
@@ -926,7 +862,7 @@ export default function ProfilePage() {
               </button>
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() => handleSubmit(handleSave)()}
                 disabled={saving}
                 className="flex-1 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
               >

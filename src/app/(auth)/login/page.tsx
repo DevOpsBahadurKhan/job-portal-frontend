@@ -1,18 +1,14 @@
-
 "use client";
-
-import {
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
-
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  loginSchema,
+  type LoginFormValues,
+} from "@/lib/validations/auth.schema";
 import {
   Eye,
   EyeOff,
@@ -23,91 +19,81 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
-
 function LoginPageContent() {
   const { login } = useAuth();
-
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
-
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-
-  // Prevent multiple submissions
-  const submittingRef = useRef(false);
-
+  const {
+    register,
+    handleSubmit,
+    setError,
+    clearErrors,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+  // Registered field handlers
+  const emailField = register("email");
+  const passwordField = register("password");
   // Handle OAuth errors from URL
   useEffect(() => {
     const error = searchParams.get("error");
-
     if (error) {
-      setErrorMessage(error);
+      setError("root.server", {
+        type: "oauth",
+        message: error,
+      });
     }
-  }, [searchParams]);
-
+  }, [searchParams, setError]);
   // Login handler
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    // Prevent duplicate API requests
-    if (submittingRef.current) return;
-
-    submittingRef.current = true;
-    setLoading(true);
-    setErrorMessage("");
-
+  const onSubmit = async (data: LoginFormValues) => {
+    clearErrors("root");
     try {
       const result = await login(
-        formData.email.trim(),
-        formData.password,
+        data.email,
+        data.password,
         undefined,
         rememberMe
       );
-
       if (result.success) {
         router.replace("/jobs");
         return;
       }
-
-      setErrorMessage("Invalid email or password.");
+      setError("root.server", {
+        type: "server",
+        message: "Invalid email or password.",
+      });
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Unable to connect. Please try again."
-      );
-    } finally {
-      submittingRef.current = false;
-      setLoading(false);
+      setError("root.server", {
+        type: "server",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Unable to connect. Please try again.",
+      });
     }
   };
-
   // Google OAuth handler
   const handleGoogleLogin = () => {
     window.location.assign(
       `${process.env.NEXT_PUBLIC_API_URL}/api/auth/google`
     );
   };
-
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-10 sm:px-6">
-
       {/* Background */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-100/60 blur-3xl" />
         <div className="absolute -bottom-40 -right-32 h-[500px] w-[500px] rounded-full bg-indigo-100/50 blur-3xl" />
         <div className="absolute left-1/2 top-0 h-px w-full -translate-x-1/2 bg-gradient-to-r from-transparent via-blue-200 to-transparent" />
       </div>
-
       <div className="relative z-10 w-full max-w-[440px]">
-
         {/* Logo */}
         <div className="mb-7 flex flex-col items-center text-center">
           <Link
@@ -118,31 +104,29 @@ function LoginPageContent() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
               <BriefcaseBusiness className="h-6 w-6" />
             </span>
-
             <span className="text-2xl font-extrabold tracking-tight text-slate-900">
               Quick<span className="text-blue-600">Hire</span>
             </span>
           </Link>
         </div>
-
         {/* Login Card */}
         <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_50px_-20px_rgba(15,23,42,0.18)] sm:p-9">
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-
-            {/* Error Message */}
-            {errorMessage && (
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+            className="space-y-5"
+          >
+            {/* Server / OAuth Error */}
+            {errors.root?.server?.message && (
               <div
                 role="alert"
                 aria-live="polite"
                 className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
               >
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-
-                <p>{errorMessage}</p>
+                <p>{errors.root.server.message}</p>
               </div>
             )}
-
             {/* Email */}
             <div>
               <label
@@ -151,30 +135,34 @@ function LoginPageContent() {
               >
                 Email Address
               </label>
-
               <div className="group relative">
                 <Mail className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 transition group-focus-within:text-blue-600" />
-
                 <input
+                  {...emailField}
                   id="email"
-                  name="email"
                   type="email"
                   autoComplete="email"
-                  required
                   placeholder="you@example.com"
-                  value={formData.email}
+                  aria-invalid={!!errors.email}
+                  aria-describedby={
+                    errors.email ? "email-error" : undefined
+                  }
                   onChange={(e) => {
-                    setFormData({
-                      ...formData,
-                      email: e.target.value,
-                    });
-                    setErrorMessage("");
+                    emailField.onChange(e);
+                    clearErrors("root");
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3.5 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
               </div>
+              {errors.email && (
+                <p
+                  id="email-error"
+                  className="mt-1.5 text-xs text-red-600"
+                >
+                  {errors.email.message}
+                </p>
+              )}
             </div>
-
             {/* Password */}
             <div>
               <div className="mb-2 flex items-center justify-between">
@@ -185,28 +173,24 @@ function LoginPageContent() {
                   Password
                 </label>
               </div>
-
               <div className="group relative">
                 <LockKeyhole className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 transition group-focus-within:text-blue-600" />
-
                 <input
+                  {...passwordField}
                   id="password"
-                  name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  required
                   placeholder="Enter your password"
-                  value={formData.password}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={
+                    errors.password ? "password-error" : undefined
+                  }
                   onChange={(e) => {
-                    setFormData({
-                      ...formData,
-                      password: e.target.value,
-                    });
-                    setErrorMessage("");
+                    passwordField.onChange(e);
+                    clearErrors("root");
                   }}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3.5 pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
                 />
-
                 {/* Show / Hide Password */}
                 <button
                   type="button"
@@ -225,8 +209,15 @@ function LoginPageContent() {
                   )}
                 </button>
               </div>
+              {errors.password && (
+                <p
+                  id="password-error"
+                  className="mt-1.5 text-xs text-red-600"
+                >
+                  {errors.password.message}
+                </p>
+              )}
             </div>
-
             {/* Remember Me + Forgot Password */}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="group relative flex items-center gap-2">
@@ -244,24 +235,19 @@ function LoginPageContent() {
                     }
                     className="h-4 w-4 rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
                   />
-
                   Remember me
                 </label>
-
                 <span
                   className="cursor-help text-xs text-slate-400"
                   aria-label="Remember me information"
                 >
                   ⓘ
                 </span>
-
                 <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-52 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-5 text-white shadow-lg group-hover:block">
                   Keep me signed in for 7 days.
-
                   <div className="absolute left-5 top-full h-0 w-0 border-x-4 border-t-4 border-x-transparent border-t-slate-800" />
                 </div>
               </div>
-
               <Link
                 href="/forgot-password"
                 className="text-sm font-semibold text-blue-600 transition hover:text-blue-700"
@@ -269,14 +255,13 @@ function LoginPageContent() {
                 Forgot password?
               </Link>
             </div>
-
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={isSubmitting}
               className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/20 focus:outline-none focus:ring-4 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
             >
-              {loading ? (
+              {isSubmitting ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                   Signing in...
@@ -289,20 +274,17 @@ function LoginPageContent() {
               )}
             </button>
           </form>
-
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
             </div>
-
             <div className="relative flex justify-center">
               <span className="bg-white px-4 text-xs font-medium text-slate-400">
                 OR CONTINUE WITH
               </span>
             </div>
           </div>
-
           {/* Google Login */}
           <button
             type="button"
@@ -331,10 +313,8 @@ function LoginPageContent() {
                 d="M12 6.14c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.84 3.21 14.63 2.25 12 2.25a9.75 9.75 0 0 0-8.71 5.39l3.24 2.53C7.3 7.86 9.46 6.14 12 6.14Z"
               />
             </svg>
-
             Continue with Google
           </button>
-
           {/* Register Link */}
           <div className="mt-7 text-center">
             <p className="text-sm text-slate-500">
@@ -348,7 +328,6 @@ function LoginPageContent() {
             </p>
           </div>
         </section>
-
         {/* Security Footer */}
         <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-400">
           <ShieldCheck className="h-4 w-4" />
@@ -358,7 +337,6 @@ function LoginPageContent() {
     </main>
   );
 }
-
 export default function LoginPage() {
   return (
     <Suspense
